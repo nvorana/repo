@@ -1,152 +1,101 @@
-# Interactive Form - Typeform-Inspired Web App
+# CallCoach — AI Sales Call Review
 
-A modern, mobile-first web application with smooth animations and an engaging one-question-at-a-time flow, inspired by Typeform's user experience.
+Upload a one-on-one sales call recording and get back a structured coaching
+review: what went right, what went wrong, **every objection** (explicit and
+the implicit ones that were never voiced or never handled), a delivery
+analysis grounded in real audio metrics (talk ratio, pace, pauses,
+interruptions, filler words), a scorecard against your sales framework, and
+prioritized coaching advice.
 
-## Features
+## Architecture — built for reuse
 
-- **One-Question-at-a-Time Flow**: Focused user experience that guides users through each question sequentially
-- **Smooth Animations**: Framer Motion-powered transitions that feel natural and engaging
-- **Mobile-First Design**: Optimized for mobile devices with touch-friendly interactions
-- **Progress Tracking**: Visual progress bar showing completion status
-- **Multiple Question Types**:
-  - Text input
-  - Email input
-  - Multiple choice (with instant selection)
-  - Textarea for long-form responses
-- **Keyboard Navigation**: Press Enter to advance through questions
-- **Responsive Design**: Works seamlessly on desktop, tablet, and mobile
-- **Beautiful Gradients**: Eye-catching color schemes that enhance the visual experience
+The app is three independent layers; each lower layer knows nothing about the
+ones above it, so the engine can be embedded anywhere.
 
-## Tech Stack
+```
+core/      The engine. Pure TypeScript, no React/Express. Audio in → review out.
+server/    Thin REST API hosting the engine (Express). Async jobs + JSON storage.
+src/       React web UI — just one consumer of the REST API.
+```
 
-- **React 18** - UI library
-- **TypeScript** - Type safety
-- **Vite** - Fast build tool and dev server
-- **Tailwind CSS** - Utility-first styling
-- **Framer Motion** - Smooth animations
+### Use it as a library
 
-## Getting Started
+```ts
+import { reviewCall, AssemblyAIProvider } from "./core/index.ts";
 
-### Prerequisites
+const result = await reviewCall(
+  { data: audioBuffer, filename: "call.mp3" },
+  { transcriber: new AssemblyAIProvider(process.env.ASSEMBLYAI_API_KEY!) },
+);
+// result.review     → structured report (objections, scorecard, coaching...)
+// result.metrics    → objective delivery metrics (pauses, talk ratio...)
+// result.transcript → diarized transcript with timestamps
+```
 
-- Node.js 16+ installed
-- npm or yarn package manager
+Embed it in a CLI, a Slack bot, a queue worker, a CRM hook — anything that can
+hand it audio bytes.
 
-### Installation
+### Use it over HTTP
 
-1. Install dependencies:
-```bash
+| Endpoint | Purpose |
+|---|---|
+| `POST /api/reviews` | multipart upload, field `audio` (+ optional `frameworkId`); returns `202 {id}` |
+| `GET /api/reviews/:id` | job status (`queued → transcribing → identifying_speakers → analyzing → completed`) + full report |
+| `GET /api/reviews` | list of reviews (light) |
+| `GET /api/frameworks` | available scoring frameworks |
+| `GET /api/health` | server + key configuration check |
+
+### Swap the parts
+
+- **Transcription** — `TranscriptionProvider` interface
+  (`core/transcription/provider.ts`). AssemblyAI is the default (speaker
+  diarization + word timestamps); implement the interface to use Deepgram,
+  Whisper, or an on-prem model.
+- **Sales framework** — drop a markdown file in `server/frameworks/` to score
+  calls against your own methodology (see the README there), or pass a
+  `SalesFramework` object to `reviewCall` directly. The default is a general
+  best-practices rubric.
+- **Storage** — `server/store.ts` writes one JSON file per review; replace it
+  with a database without touching the engine.
+
+## How a review works
+
+1. **Transcribe** — AssemblyAI produces a diarized transcript with word-level
+   timestamps (`speakers_expected: 2`, disfluencies kept for filler analysis).
+2. **Identify speakers** — Claude maps the anonymous diarization labels to
+   salesperson vs. prospect.
+3. **Measure** — delivery metrics are computed *in code* from word timings
+   (pauses >1.5s with surrounding context, interruptions, talk ratio, WPM,
+   monologues, questions, filler words) so the tonality review is grounded in
+   real numbers, not model guesses.
+4. **Review** — Claude (`claude-opus-4-8`, adaptive thinking, streaming,
+   structured output validated against a zod schema) reviews the full
+   transcript + metrics against the active sales framework.
+
+## Getting started
+
+```sh
 npm install
+cp .env.example .env   # add ANTHROPIC_API_KEY and ASSEMBLYAI_API_KEY
+npm run dev            # API on :8787, web app on :5173 (proxied)
 ```
 
-2. Start the development server:
-```bash
-npm run dev
-```
+Then open http://localhost:5173 and drop in a call recording (mp3, m4a, wav,
+ogg, webm — up to 250 MB).
 
-3. Open your browser and navigate to the URL shown in the terminal (usually `http://localhost:5173`)
+### Keys
 
-### Building for Production
+- `ANTHROPIC_API_KEY` — the review model. https://platform.claude.com/
+- `ASSEMBLYAI_API_KEY` — transcription + diarization. https://www.assemblyai.com/
 
-```bash
-npm run build
-```
+Both stay server-side; the browser only talks to the local API.
 
-The built files will be in the `dist` directory, ready to deploy to any static hosting service.
+## Scripts
 
-## Customizing the Form
-
-### Adding/Modifying Questions
-
-Edit the `sampleQuestions` array in `src/App.tsx`:
-
-```typescript
-const sampleQuestions: Question[] = [
-  {
-    id: 'unique-id',
-    type: 'text', // 'text' | 'email' | 'choice' | 'textarea'
-    question: 'Your question here?',
-    placeholder: 'Optional placeholder',
-    required: true,
-    options: ['Option 1', 'Option 2'], // Only for type: 'choice'
-  },
-  // Add more questions...
-];
-```
-
-### Handling Form Submissions
-
-The `handleSubmit` function in `src/App.tsx` receives all answers when the form is completed:
-
-```typescript
-const handleSubmit = (answers: Record<string, string>) => {
-  console.log('Form submitted:', answers);
-
-  // Send to your backend
-  fetch('/api/submit', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(answers),
-  });
-};
-```
-
-### Customizing Colors
-
-Update the gradient colors in:
-- `src/components/FormContainer.tsx` - Main form background
-- `src/components/SuccessScreen.tsx` - Success screen background
-- `tailwind.config.js` - Global theme colors
-
-## Project Structure
-
-```
-src/
-├── components/
-│   ├── FormContainer.tsx      # Main form wrapper with state management
-│   ├── QuestionSlide.tsx      # Individual question component
-│   └── SuccessScreen.tsx      # Completion screen
-├── App.tsx                     # Main application component
-├── main.tsx                    # Application entry point
-└── index.css                   # Global styles with Tailwind
-```
-
-## Performance Considerations
-
-With 150-300 daily submissions, consider:
-
-1. **Backend Integration**: Set up a proper API endpoint to handle submissions
-2. **Database**: Use PostgreSQL, MongoDB, or a service like Supabase/Firebase
-3. **Analytics**: Track completion rates and drop-off points
-4. **Validation**: Add server-side validation for all inputs
-5. **Rate Limiting**: Prevent spam submissions
-6. **Error Handling**: Add retry logic for failed submissions
-
-## Mobile Optimization
-
-The app is optimized for mobile with:
-- Touch-friendly button sizes (minimum 44x44px)
-- Disabled pinch-to-zoom for app-like experience
-- Apple mobile web app meta tags
-- Responsive font sizes and spacing
-- Smooth touch interactions
-
-## Browser Support
-
-- Chrome/Edge (latest)
-- Firefox (latest)
-- Safari (latest)
-- Mobile browsers (iOS Safari, Chrome Mobile)
-
-## Next Steps
-
-1. Set up a backend API for form submissions
-2. Add database to store responses
-3. Create an admin dashboard to view submissions
-4. Add conditional logic (skip questions based on answers)
-5. Implement form analytics
-6. Add multi-language support
-
-## License
-
-MIT
+| Script | What it does |
+|---|---|
+| `npm run dev` | API server + web app together (watch mode) |
+| `npm run dev:server` / `dev:web` | each side individually |
+| `npm run build` | typecheck everything + production web build |
+| `npm run start:server` | run the API server |
+| `npm run lint` | ESLint |
