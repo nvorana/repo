@@ -11,6 +11,10 @@ export interface ReviewJob {
   filename: string;
   createdAt: string;
   status: JobStatus;
+  /** Salesperson on the call, as entered at upload time. */
+  rep?: string;
+  /** Stored audio file name (under the audio dir), when retained. */
+  audioFile?: string;
   error?: string;
   result?: CallReviewResult;
 }
@@ -28,12 +32,13 @@ export class ReviewStore {
     fs.mkdirSync(dir, { recursive: true });
   }
 
-  create(filename: string): ReviewJob {
+  create(filename: string, rep?: string): ReviewJob {
     const job: ReviewJob = {
       id: crypto.randomUUID(),
       filename,
       createdAt: new Date().toISOString(),
       status: "queued",
+      ...(rep ? { rep } : {}),
     };
     this.write(job);
     return job;

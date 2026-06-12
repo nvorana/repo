@@ -16,6 +16,7 @@ import { ReviewStore } from "./store.ts";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT ?? 8787);
 const DATA_DIR = process.env.DATA_DIR ?? path.join(__dirname, "..", "data", "reviews");
+const AUDIO_DIR = process.env.AUDIO_DIR ?? path.join(__dirname, "..", "data", "audio");
 const FRAMEWORKS_DIR = path.join(__dirname, "frameworks");
 const MAX_UPLOAD_MB = 250;
 
@@ -80,18 +81,33 @@ app.get("/api/frameworks", (_req, res) => {
 });
 
 app.get("/api/reviews", (_req, res) => {
-  // List view stays light: omit full transcripts/reports.
+  // List view stays light: omit transcripts and report bodies, but include
+  // per-criterion scores so the UI can aggregate rep performance.
   res.json(
-    store.list().map(({ id, filename, createdAt, status, error, result }) => ({
+    store.list().map(({ id, filename, createdAt, status, rep, error, result }) => ({
       id,
       filename,
       createdAt,
       status,
+      rep,
       error,
       overallScore: result?.review.overallScore,
       summary: result?.review.summary,
+      scorecard: result?.review.scorecard.map(({ criterionId, criterionName, score }) => ({
+        criterionId,
+        criterionName,
+        score,
+      })),
     })),
   );
+});
+
+app.get("/api/reviews/:id/audio", (req, res) => {
+  const job = store.get(req.params.id);
+  if (!job?.audioFile) return res.status(404).json({ error: "No audio stored for this review" });
+  const file = path.join(AUDIO_DIR, path.basename(job.audioFile));
+  if (!fs.existsSync(file)) return res.status(404).json({ error: "Audio file missing" });
+  res.sendFile(file);
 });
 
 app.get("/api/reviews/:id", (req, res) => {
@@ -118,7 +134,20 @@ app.post("/api/reviews", upload.single("audio"), (req, res) => {
     return res.status(400).json({ error: `Unknown framework: ${frameworkId}` });
   }
 
-  const job = store.create(req.file.originalname);
+  const rep = typeof req.body.rep === "string" ? req.body.rep.trim().slice(0, 80) : "";
+  const job = store.create(req.file.originalname, rep || undefined);
+
+  // Keep the recording so coaches can replay moments from the report.
+  try {
+    fs.mkdirSync(AUDIO_DIR, { recursive: true });
+    const ext = path.extname(req.file.originalname).slice(0, 10) || ".audio";
+    const audioFile = `${job.id}${ext}`;
+    fs.writeFileSync(path.join(AUDIO_DIR, audioFile), req.file.buffer);
+    store.update(job.id, { audioFile });
+  } catch (err) {
+    console.error(`Could not persist audio for ${job.id}:`, err);
+  }
+
   res.status(202).json({ id: job.id, status: job.status });
 
   // Fire-and-forget; clients poll GET /api/reviews/:id for progress.

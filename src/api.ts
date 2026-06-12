@@ -10,14 +10,22 @@ export type JobStatus =
   | "completed"
   | "failed";
 
+export interface ScorecardScore {
+  criterionId: string;
+  criterionName: string;
+  score: number;
+}
+
 export interface ReviewSummary {
   id: string;
   filename: string;
   createdAt: string;
   status: JobStatus;
+  rep?: string;
   error?: string;
   overallScore?: number;
   summary?: string;
+  scorecard?: ScorecardScore[];
 }
 
 export interface ReviewJob {
@@ -25,8 +33,14 @@ export interface ReviewJob {
   filename: string;
   createdAt: string;
   status: JobStatus;
+  rep?: string;
+  audioFile?: string;
   error?: string;
   result?: CallReviewResult;
+}
+
+export function audioUrl(id: string): string {
+  return `/api/reviews/${id}/audio`;
 }
 
 async function json<T>(res: Response): Promise<T> {
@@ -45,10 +59,15 @@ export function getReview(id: string): Promise<ReviewJob> {
   return fetch(`/api/reviews/${id}`).then((r) => json<ReviewJob>(r));
 }
 
-export async function uploadReview(file: File, frameworkId?: string): Promise<{ id: string }> {
+export async function uploadReview(
+  file: File,
+  frameworkId?: string,
+  rep?: string,
+): Promise<{ id: string }> {
   const form = new FormData();
   form.append("audio", file);
   if (frameworkId) form.append("frameworkId", frameworkId);
+  if (rep) form.append("rep", rep);
   const res = await fetch("/api/reviews", { method: "POST", body: form });
   return json<{ id: string }>(res);
 }

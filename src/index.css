@@ -21,3 +21,25 @@ body {
 #root {
   height: 100%;
 }
+
+/* Ink-friendly coaching one-pager: white page, dark text, no app chrome. */
+@media print {
+  .print-hide {
+    display: none !important;
+  }
+  body,
+  #root,
+  * {
+    background: white !important;
+    color: #111 !important;
+    border-color: #ccc !important;
+    overflow: visible !important;
+    max-height: none !important;
+  }
+  blockquote {
+    color: #444 !important;
+  }
+  section {
+    break-inside: avoid-page;
+  }
+}

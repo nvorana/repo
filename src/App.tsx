@@ -54,7 +54,7 @@ export default function App() {
 
   return (
     <div className="min-h-full bg-slate-900 text-slate-100">
-      <header className="border-b border-slate-800">
+      <header className="print-hide border-b border-slate-800">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
           <button
             onClick={() => setSelectedId(null)}
@@ -111,6 +111,8 @@ function HomeView({
         <UploadCard onUploaded={onUploaded} />
       </section>
 
+      <RepDashboard reviews={reviews} />
+
       <section>
         <h2 className="mb-3 text-lg font-semibold">Recent reviews</h2>
         {reviews.length === 0 ? (
@@ -125,7 +127,14 @@ function HomeView({
                 >
                   <ScoreBadge status={r.status} score={r.overallScore} />
                   <div className="min-w-0 flex-1">
-                    <div className="truncate font-medium">{r.filename}</div>
+                    <div className="flex items-center gap-2">
+                      <span className="truncate font-medium">{r.filename}</span>
+                      {r.rep && (
+                        <span className="shrink-0 rounded-full bg-sky-500/20 px-2 py-0.5 text-xs text-sky-300">
+                          {r.rep}
+                        </span>
+                      )}
+                    </div>
                     <div className="truncate text-sm text-slate-400">
                       {r.status === "failed"
                         ? r.error
@@ -142,6 +151,97 @@ function HomeView({
         )}
       </section>
     </div>
+  );
+}
+
+interface RepStats {
+  rep: string;
+  calls: number;
+  avgScore: number;
+  lastScore: number;
+  weakest?: { name: string; avg: number };
+}
+
+function computeRepStats(reviews: ReviewSummary[]): RepStats[] {
+  const byRep = new Map<string, ReviewSummary[]>();
+  for (const r of reviews) {
+    if (r.rep && r.status === "completed" && r.overallScore != null) {
+      const list = byRep.get(r.rep) ?? [];
+      list.push(r);
+      byRep.set(r.rep, list);
+    }
+  }
+  return [...byRep.entries()]
+    .map(([rep, list]) => {
+      // list is newest-first from the API
+      const scores = list.map((r) => r.overallScore!);
+      const criteria = new Map<string, { name: string; scores: number[] }>();
+      for (const r of list) {
+        for (const c of r.scorecard ?? []) {
+          const entry = criteria.get(c.criterionId) ?? { name: c.criterionName, scores: [] };
+          entry.scores.push(c.score);
+          criteria.set(c.criterionId, entry);
+        }
+      }
+      const weakest = [...criteria.values()]
+        .map(({ name, scores }) => ({ name, avg: scores.reduce((a, b) => a + b, 0) / scores.length }))
+        .sort((a, b) => a.avg - b.avg)[0];
+      return {
+        rep,
+        calls: list.length,
+        avgScore: scores.reduce((a, b) => a + b, 0) / scores.length,
+        lastScore: scores[0],
+        weakest,
+      };
+    })
+    .sort((a, b) => b.calls - a.calls);
+}
+
+function RepDashboard({ reviews }: { reviews: ReviewSummary[] }) {
+  const stats = computeRepStats(reviews);
+  if (stats.length === 0) return null;
+  return (
+    <section>
+      <h2 className="mb-1 text-lg font-semibold">By salesperson</h2>
+      <p className="mb-3 text-sm text-slate-400">
+        Where each rep stands across their reviewed calls — and the single skill to coach next.
+      </p>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {stats.map((s) => {
+          const trend = s.lastScore - s.avgScore;
+          return (
+            <div key={s.rep} className="rounded-xl bg-slate-800/60 p-4">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="truncate font-semibold text-slate-100">{s.rep}</span>
+                <span className="shrink-0 text-xs text-slate-500">
+                  {s.calls} call{s.calls === 1 ? "" : "s"}
+                </span>
+              </div>
+              <div className="mt-2 flex items-end gap-3">
+                <span className="text-3xl font-bold text-slate-100">{s.avgScore.toFixed(1)}</span>
+                <span className="pb-1 text-xs text-slate-400">avg / 10</span>
+                {s.calls > 1 && (
+                  <span
+                    className={`pb-1 text-xs ${
+                      trend > 0.2 ? "text-emerald-400" : trend < -0.2 ? "text-red-400" : "text-slate-500"
+                    }`}
+                  >
+                    {trend > 0.2 ? "↑ improving" : trend < -0.2 ? "↓ slipping" : "→ steady"} (last:{" "}
+                    {s.lastScore})
+                  </span>
+                )}
+              </div>
+              {s.weakest && (
+                <p className="mt-3 rounded-lg bg-slate-900/60 p-2.5 text-xs text-slate-300">
+                  <span className="font-semibold text-amber-300">Coach next: </span>
+                  {s.weakest.name} (avg {s.weakest.avg.toFixed(1)}/5)
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -184,7 +284,10 @@ function Spinner() {
 function DetailView({ job, onBack }: { job: ReviewJob | null; onBack: () => void }) {
   return (
     <div>
-      <button onClick={onBack} className="mb-6 text-sm text-slate-400 hover:text-slate-200">
+      <button
+        onClick={onBack}
+        className="print-hide mb-6 text-sm text-slate-400 hover:text-slate-200"
+      >
         ← All reviews
       </button>
 
@@ -199,8 +302,21 @@ function DetailView({ job, onBack }: { job: ReviewJob | null; onBack: () => void
         <ProgressView job={job} />
       ) : (
         <div>
-          <h1 className="mb-6 truncate text-2xl font-semibold">{job.filename}</h1>
-          <Report result={job.result} />
+          <div className="mb-6 flex flex-wrap items-center gap-3">
+            <h1 className="min-w-0 truncate text-2xl font-semibold">{job.filename}</h1>
+            {job.rep && (
+              <span className="rounded-full bg-sky-500/20 px-3 py-1 text-sm text-sky-300">
+                {job.rep}
+              </span>
+            )}
+            <button
+              onClick={() => window.print()}
+              className="print-hide ml-auto rounded-lg border border-slate-600 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800"
+            >
+              🖨 Print / Save PDF
+            </button>
+          </div>
+          <Report result={job.result} reviewId={job.id} />
         </div>
       )}
     </div>
