@@ -1,6 +1,7 @@
 import "./env.ts";
 import express from "express";
 import multer from "multer";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -58,6 +59,26 @@ const upload = multer({
 
 const app = express();
 app.use(express.json());
+
+// --- Access gate -------------------------------------------------------------
+// When APP_PASSWORD is set (always set it for internet-facing deployments),
+// every request must carry it via HTTP Basic Auth — the browser shows a
+// native login prompt. Any username is accepted; only the password matters.
+const APP_PASSWORD = process.env.APP_PASSWORD;
+if (APP_PASSWORD) {
+  app.use((req, res, next) => {
+    const header = req.headers.authorization ?? "";
+    const [scheme, encoded] = header.split(" ");
+    if (scheme === "Basic" && encoded) {
+      const decoded = Buffer.from(encoded, "base64").toString("utf8");
+      const password = decoded.slice(decoded.indexOf(":") + 1);
+      const a = crypto.createHash("sha256").update(password).digest();
+      const b = crypto.createHash("sha256").update(APP_PASSWORD).digest();
+      if (crypto.timingSafeEqual(a, b)) return next();
+    }
+    res.set("WWW-Authenticate", 'Basic realm="CallCoach"').status(401).send("Password required");
+  });
+}
 
 app.get("/api/health", (_req, res) => {
   res.json({
@@ -176,6 +197,21 @@ async function runReview(
       error: err instanceof Error ? err.message : String(err),
     });
   }
+}
+
+// --- Static web app (production) --------------------------------------------
+// In production the built UI (dist/) is served by this same server, so one
+// Railway/Render service hosts everything. In dev, Vite serves the UI instead.
+const DIST_DIR = path.join(__dirname, "..", "dist");
+if (fs.existsSync(DIST_DIR)) {
+  app.use(express.static(DIST_DIR));
+  // SPA fallback: any non-API GET serves the app shell.
+  app.use((req, res, next) => {
+    if (req.method === "GET" && !req.path.startsWith("/api/")) {
+      return res.sendFile(path.join(DIST_DIR, "index.html"));
+    }
+    next();
+  });
 }
 
 app.listen(PORT, () => {
