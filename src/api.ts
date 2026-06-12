@@ -16,6 +16,12 @@ export interface ScorecardScore {
   score: number;
 }
 
+export interface CoachFeedback {
+  notes: string;
+  reviewed: boolean;
+  updatedAt: string;
+}
+
 export interface ReviewSummary {
   id: string;
   filename: string;
@@ -23,6 +29,8 @@ export interface ReviewSummary {
   status: JobStatus;
   rep?: string;
   error?: string;
+  coachReviewed?: boolean;
+  hasCoachNotes?: boolean;
   overallScore?: number;
   summary?: string;
   scorecard?: ScorecardScore[];
@@ -35,8 +43,22 @@ export interface ReviewJob {
   status: JobStatus;
   rep?: string;
   audioFile?: string;
+  coach?: CoachFeedback;
   error?: string;
   result?: CallReviewResult;
+}
+
+export async function saveCoachFeedback(
+  id: string,
+  notes: string,
+  reviewed: boolean,
+): Promise<ReviewJob> {
+  const res = await fetch(`/api/reviews/${id}/coach`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ notes, reviewed }),
+  });
+  return json<ReviewJob>(res);
 }
 
 export function audioUrl(id: string): string {

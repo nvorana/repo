@@ -6,6 +6,14 @@ import type { ReviewStage } from "../core/pipeline.ts";
 
 export type JobStatus = "queued" | ReviewStage | "completed" | "failed";
 
+export interface CoachFeedback {
+  /** Sales head's commendations/corrections for this call. */
+  notes: string;
+  /** True once the coach has gone over the call with the rep. */
+  reviewed: boolean;
+  updatedAt: string;
+}
+
 export interface ReviewJob {
   id: string;
   filename: string;
@@ -15,6 +23,7 @@ export interface ReviewJob {
   rep?: string;
   /** Stored audio file name (under the audio dir), when retained. */
   audioFile?: string;
+  coach?: CoachFeedback;
   error?: string;
   result?: CallReviewResult;
 }

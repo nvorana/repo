@@ -105,13 +105,15 @@ app.get("/api/reviews", (_req, res) => {
   // List view stays light: omit transcripts and report bodies, but include
   // per-criterion scores so the UI can aggregate rep performance.
   res.json(
-    store.list().map(({ id, filename, createdAt, status, rep, error, result }) => ({
+    store.list().map(({ id, filename, createdAt, status, rep, error, result, coach }) => ({
       id,
       filename,
       createdAt,
       status,
       rep,
       error,
+      coachReviewed: coach?.reviewed ?? false,
+      hasCoachNotes: Boolean(coach?.notes),
       overallScore: result?.review.overallScore,
       summary: result?.review.summary,
       scorecard: result?.review.scorecard.map(({ criterionId, criterionName, score }) => ({
@@ -121,6 +123,17 @@ app.get("/api/reviews", (_req, res) => {
       })),
     })),
   );
+});
+
+app.post("/api/reviews/:id/coach", (req, res) => {
+  const job = store.get(req.params.id);
+  if (!job) return res.status(404).json({ error: "Review not found" });
+  const notes = typeof req.body.notes === "string" ? req.body.notes.slice(0, 10_000) : "";
+  const reviewed = Boolean(req.body.reviewed);
+  const updated = store.update(job.id, {
+    coach: { notes, reviewed, updatedAt: new Date().toISOString() },
+  });
+  res.json(updated);
 });
 
 app.get("/api/reviews/:id/audio", (req, res) => {

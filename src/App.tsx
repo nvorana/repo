@@ -3,6 +3,7 @@ import {
   getReview,
   isInProgress,
   listReviews,
+  saveCoachFeedback,
   STATUS_LABELS,
   type ReviewJob,
   type ReviewSummary,
@@ -70,6 +71,7 @@ export default function App() {
         {selectedId ? (
           <DetailView
             job={selected?.id === selectedId ? selected : null}
+            onUpdated={setSelected}
             onBack={() => {
               setSelectedId(null);
               refreshList();
@@ -99,6 +101,9 @@ function HomeView({
   onUploaded: (id: string) => void;
   onSelect: (id: string) => void;
 }) {
+  const [repFilter, setRepFilter] = useState<string>("");
+  const reps = [...new Set(reviews.map((r) => r.rep).filter((r): r is string => Boolean(r)))].sort();
+  const visible = repFilter ? reviews.filter((r) => r.rep === repFilter) : reviews;
   return (
     <div className="space-y-10">
       <section>
@@ -114,12 +119,28 @@ function HomeView({
       <RepDashboard reviews={reviews} />
 
       <section>
-        <h2 className="mb-3 text-lg font-semibold">Recent reviews</h2>
-        {reviews.length === 0 ? (
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold">Recent reviews</h2>
+          {reps.length > 0 && (
+            <select
+              value={repFilter}
+              onChange={(e) => setRepFilter(e.target.value)}
+              className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-1.5 text-sm text-slate-100"
+            >
+              <option value="">All salespeople</option>
+              {reps.map((rep) => (
+                <option key={rep} value={rep}>
+                  {rep}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+        {visible.length === 0 ? (
           <p className="text-sm text-slate-500">No calls reviewed yet.</p>
         ) : (
           <ul className="space-y-2">
-            {reviews.map((r) => (
+            {visible.map((r) => (
               <li key={r.id}>
                 <button
                   onClick={() => onSelect(r.id)}
@@ -134,6 +155,16 @@ function HomeView({
                           {r.rep}
                         </span>
                       )}
+                      {r.status === "completed" &&
+                        (r.coachReviewed ? (
+                          <span className="shrink-0 rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs text-emerald-300">
+                            Coached ✓
+                          </span>
+                        ) : (
+                          <span className="shrink-0 rounded-full border border-amber-400/40 px-2 py-0.5 text-xs text-amber-300">
+                            Awaiting coach
+                          </span>
+                        ))}
                     </div>
                     <div className="truncate text-sm text-slate-400">
                       {r.status === "failed"
@@ -281,7 +312,107 @@ function Spinner() {
   );
 }
 
-function DetailView({ job, onBack }: { job: ReviewJob | null; onBack: () => void }) {
+function CoachPanel({ job, onUpdated }: { job: ReviewJob; onUpdated: (job: ReviewJob) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [notes, setNotes] = useState(job.coach?.notes ?? "");
+  const [reviewed, setReviewed] = useState(job.coach?.reviewed ?? false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save() {
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await saveCoachFeedback(job.id, notes, reviewed);
+      onUpdated(updated);
+      setEditing(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const saved = job.coach;
+  return (
+    <section className="mb-8 rounded-2xl border border-sky-500/30 bg-sky-500/5 p-5">
+      <div className="flex items-center gap-3">
+        <h2 className="text-lg font-semibold text-slate-100">Coach's notes</h2>
+        {saved?.reviewed && (
+          <span className="rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-xs font-medium text-emerald-300">
+            Reviewed with rep ✓
+          </span>
+        )}
+        {!editing && (
+          <button
+            onClick={() => setEditing(true)}
+            className="print-hide ml-auto rounded-lg border border-slate-600 px-3 py-1 text-sm text-slate-300 hover:bg-slate-800"
+          >
+            {saved?.notes ? "Edit" : "Add notes"}
+          </button>
+        )}
+      </div>
+
+      {!editing ? (
+        saved?.notes ? (
+          <p className="mt-3 whitespace-pre-wrap text-sm text-slate-200">{saved.notes}</p>
+        ) : (
+          <p className="mt-3 text-sm text-slate-500">
+            No coach feedback yet — the sales head adds commendations and corrections here after
+            reading the report.
+          </p>
+        )
+      ) : (
+        <div className="print-hide mt-3 space-y-3">
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={5}
+            placeholder="What this rep should keep doing, stop doing, and try on the next call…"
+            className="w-full rounded-lg border border-slate-600 bg-slate-900 p-3 text-sm text-slate-100 placeholder:text-slate-500"
+          />
+          <div className="flex flex-wrap items-center gap-4">
+            <label className="flex items-center gap-2 text-sm text-slate-300">
+              <input
+                type="checkbox"
+                checked={reviewed}
+                onChange={(e) => setReviewed(e.target.checked)}
+                className="h-4 w-4"
+              />
+              Reviewed with the salesperson
+            </label>
+            <div className="ml-auto flex gap-2">
+              <button
+                onClick={() => setEditing(false)}
+                className="rounded-lg px-3 py-1.5 text-sm text-slate-400 hover:text-slate-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => void save()}
+                disabled={saving}
+                className="rounded-lg bg-sky-500/80 px-4 py-1.5 text-sm font-medium text-white hover:bg-sky-500 disabled:opacity-50"
+              >
+                {saving ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </div>
+          {error && <p className="text-sm text-red-400">{error}</p>}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function DetailView({
+  job,
+  onBack,
+  onUpdated,
+}: {
+  job: ReviewJob | null;
+  onBack: () => void;
+  onUpdated: (job: ReviewJob) => void;
+}) {
   return (
     <div>
       <button
@@ -316,6 +447,7 @@ function DetailView({ job, onBack }: { job: ReviewJob | null; onBack: () => void
               🖨 Print / Save PDF
             </button>
           </div>
+          <CoachPanel job={job} onUpdated={onUpdated} />
           <Report result={job.result} reviewId={job.id} />
         </div>
       )}
