@@ -1,5 +1,5 @@
-import { useRef, useState } from "react";
-import { uploadReview } from "../api.ts";
+import { useEffect, useRef, useState } from "react";
+import { listFrameworks, uploadReview, type FrameworkInfo } from "../api.ts";
 
 interface Props {
   onUploaded: (id: string) => void;
@@ -10,13 +10,25 @@ export function UploadCard({ onUploaded }: Props) {
   const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [frameworks, setFrameworks] = useState<FrameworkInfo[]>([]);
+  const [frameworkId, setFrameworkId] = useState<string>("");
+
+  useEffect(() => {
+    listFrameworks()
+      .then((list) => {
+        setFrameworks(list);
+        const def = list.find((f) => f.isDefault) ?? list[0];
+        if (def) setFrameworkId((current) => current || def.id);
+      })
+      .catch(console.error);
+  }, []);
 
   async function handleFile(file: File | undefined) {
     if (!file || busy) return;
     setError(null);
     setBusy(true);
     try {
-      const { id } = await uploadReview(file);
+      const { id } = await uploadReview(file, frameworkId || undefined);
       onUploaded(id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
@@ -63,6 +75,26 @@ export function UploadCard({ onUploaded }: Props) {
         className="hidden"
         onChange={(e) => void handleFile(e.target.files?.[0])}
       />
+      {frameworks.length > 1 && (
+        <div className="mt-4 flex items-center gap-3">
+          <label htmlFor="framework" className="text-sm text-slate-400">
+            Review against:
+          </label>
+          <select
+            id="framework"
+            value={frameworkId}
+            onChange={(e) => setFrameworkId(e.target.value)}
+            className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-1.5 text-sm text-slate-100"
+          >
+            {frameworks.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.name}
+                {f.isDefault ? " (default)" : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
       {error && <p className="mt-3 text-sm text-red-400">{error}</p>}
     </div>
   );

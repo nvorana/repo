@@ -38,6 +38,15 @@ function loadFrameworks(): Map<string, SalesFramework> {
   return frameworks;
 }
 
+// The default for new reviews: DEFAULT_FRAMEWORK_ID env var if set, else the
+// sole custom framework when exactly one exists, else the general built-in.
+function pickDefaultFrameworkId(frameworks: Map<string, SalesFramework>): string {
+  const preferred = process.env.DEFAULT_FRAMEWORK_ID;
+  if (preferred && frameworks.has(preferred)) return preferred;
+  const custom = [...frameworks.keys()].filter((id) => id !== defaultFramework.id);
+  return custom.length === 1 ? custom[0] : defaultFramework.id;
+}
+
 // --- App -------------------------------------------------------------------
 
 const store = new ReviewStore(DATA_DIR);
@@ -59,11 +68,13 @@ app.get("/api/health", (_req, res) => {
 
 app.get("/api/frameworks", (_req, res) => {
   const frameworks = loadFrameworks();
+  const defaultId = pickDefaultFrameworkId(frameworks);
   res.json(
     [...frameworks.values()].map((f) => ({
       id: f.id,
       name: f.name,
       criteria: f.criteria,
+      isDefault: f.id === defaultId,
     })),
   );
 });
@@ -100,7 +111,8 @@ app.post("/api/reviews", upload.single("audio"), (req, res) => {
   }
 
   const frameworks = loadFrameworks();
-  const frameworkId = (req.body.frameworkId as string | undefined) ?? defaultFramework.id;
+  const frameworkId =
+    (req.body.frameworkId as string | undefined) || pickDefaultFrameworkId(frameworks);
   const framework = frameworks.get(frameworkId);
   if (!framework) {
     return res.status(400).json({ error: `Unknown framework: ${frameworkId}` });

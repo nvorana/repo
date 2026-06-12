@@ -45,11 +45,22 @@ export function getReview(id: string): Promise<ReviewJob> {
   return fetch(`/api/reviews/${id}`).then((r) => json<ReviewJob>(r));
 }
 
-export async function uploadReview(file: File): Promise<{ id: string }> {
+export async function uploadReview(file: File, frameworkId?: string): Promise<{ id: string }> {
   const form = new FormData();
   form.append("audio", file);
+  if (frameworkId) form.append("frameworkId", frameworkId);
   const res = await fetch("/api/reviews", { method: "POST", body: form });
   return json<{ id: string }>(res);
+}
+
+export interface FrameworkInfo {
+  id: string;
+  name: string;
+  isDefault: boolean;
+}
+
+export function listFrameworks(): Promise<FrameworkInfo[]> {
+  return fetch("/api/frameworks").then((r) => json<FrameworkInfo[]>(r));
 }
 
 export const STATUS_LABELS: Record<JobStatus, string> = {
