@@ -28,6 +28,7 @@ export interface ReviewSummary {
   createdAt: string;
   status: JobStatus;
   rep?: string;
+  client?: string;
   error?: string;
   coachReviewed?: boolean;
   hasCoachNotes?: boolean;
@@ -42,6 +43,7 @@ export interface ReviewJob {
   createdAt: string;
   status: JobStatus;
   rep?: string;
+  client?: string;
   audioFile?: string;
   coach?: CoachFeedback;
   error?: string;
@@ -112,13 +114,13 @@ export function getReview(id: string): Promise<ReviewJob> {
 
 export async function uploadReview(
   file: File,
-  frameworkId?: string,
-  rep?: string,
+  opts: { frameworkId?: string; rep?: string; client: string },
 ): Promise<{ id: string }> {
   const form = new FormData();
   form.append("audio", file);
-  if (frameworkId) form.append("frameworkId", frameworkId);
-  if (rep) form.append("rep", rep);
+  if (opts.frameworkId) form.append("frameworkId", opts.frameworkId);
+  if (opts.rep) form.append("rep", opts.rep);
+  form.append("client", opts.client);
   const res = await api("/api/reviews", { method: "POST", body: form });
   return json<{ id: string }>(res);
 }

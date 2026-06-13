@@ -443,7 +443,7 @@ function ReviewList({
             <ScoreBadge status={r.status} score={r.overallScore} />
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <span className="truncate font-medium">{r.filename}</span>
+                <span className="truncate font-medium">{r.client ?? r.filename}</span>
                 {showRep && r.rep && (
                   <span className="shrink-0 rounded-full bg-sky-500/20 px-2 py-0.5 text-xs text-sky-300">
                     {r.rep}
@@ -741,7 +741,9 @@ function DetailView({
       ) : (
         <div>
           <div className="mb-6 flex flex-wrap items-center gap-3">
-            <h1 className="min-w-0 truncate text-2xl font-semibold">{job.filename}</h1>
+            <h1 className="min-w-0 truncate text-2xl font-semibold">
+              {job.client ?? job.filename}
+            </h1>
             {job.rep && (
               <span className="rounded-full bg-sky-500/20 px-3 py-1 text-sm text-sky-300">
                 {job.rep}

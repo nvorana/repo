@@ -17,6 +17,7 @@ export function UploadCard({ onUploaded, fixedRep }: Props) {
   const [rep, setRep] = useState<string>(
     () => fixedRep ?? localStorage.getItem("callcoach.rep") ?? "",
   );
+  const [client, setClient] = useState<string>("");
   const effectiveRep = fixedRep ?? rep;
 
   useEffect(() => {
@@ -31,15 +32,19 @@ export function UploadCard({ onUploaded, fixedRep }: Props) {
 
   async function handleFile(file: File | undefined) {
     if (!file || busy) return;
+    if (!client.trim()) {
+      setError("Enter the client's name before uploading.");
+      return;
+    }
     setError(null);
     setBusy(true);
     try {
       if (!fixedRep) localStorage.setItem("callcoach.rep", rep);
-      const { id } = await uploadReview(
-        file,
-        frameworkId || undefined,
-        effectiveRep.trim() || undefined,
-      );
+      const { id } = await uploadReview(file, {
+        frameworkId: frameworkId || undefined,
+        rep: effectiveRep.trim() || undefined,
+        client: client.trim(),
+      });
       onUploaded(id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
@@ -49,16 +54,40 @@ export function UploadCard({ onUploaded, fixedRep }: Props) {
     }
   }
 
+  const ready = client.trim().length > 0;
+
+  function openPicker() {
+    if (!ready) {
+      setError("Enter the client's name first.");
+      return;
+    }
+    inputRef.current?.click();
+  }
+
   return (
     <div>
+      <div className="mb-4">
+        <label htmlFor="client" className="mb-1 block text-sm font-medium text-slate-200">
+          Client name <span className="text-amber-400">*</span>
+        </label>
+        <input
+          id="client"
+          type="text"
+          value={client}
+          onChange={(e) => setClient(e.target.value)}
+          placeholder="Who was on the call? e.g. Jenny Reyes"
+          className="w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-slate-100 placeholder:text-slate-500"
+        />
+      </div>
       <div
         role="button"
         tabIndex={0}
-        onClick={() => inputRef.current?.click()}
-        onKeyDown={(e) => e.key === "Enter" && inputRef.current?.click()}
+        aria-disabled={!ready}
+        onClick={openPicker}
+        onKeyDown={(e) => e.key === "Enter" && openPicker()}
         onDragOver={(e) => {
           e.preventDefault();
-          setDragging(true);
+          if (ready) setDragging(true);
         }}
         onDragLeave={() => setDragging(false)}
         onDrop={(e) => {
@@ -69,7 +98,9 @@ export function UploadCard({ onUploaded, fixedRep }: Props) {
         className={`cursor-pointer rounded-2xl border-2 border-dashed p-10 text-center transition-colors ${
           dragging
             ? "border-amber-400 bg-amber-400/10"
-            : "border-slate-600 bg-slate-800/40 hover:border-slate-400"
+            : ready
+              ? "border-slate-600 bg-slate-800/40 hover:border-slate-400"
+              : "border-slate-700 bg-slate-800/20 opacity-60"
         }`}
       >
         <p className="text-lg font-medium text-slate-100">

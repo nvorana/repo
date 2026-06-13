@@ -21,6 +21,8 @@ export interface ReviewJob {
   status: JobStatus;
   /** Salesperson on the call, as entered at upload time. */
   rep?: string;
+  /** Prospect/client on the call, entered at upload time (required in UI). */
+  client?: string;
   /** Stored audio file name (under the audio dir), when retained. */
   audioFile?: string;
   coach?: CoachFeedback;
@@ -41,13 +43,14 @@ export class ReviewStore {
     fs.mkdirSync(dir, { recursive: true });
   }
 
-  create(filename: string, rep?: string): ReviewJob {
+  create(filename: string, rep?: string, client?: string): ReviewJob {
     const job: ReviewJob = {
       id: crypto.randomUUID(),
       filename,
       createdAt: new Date().toISOString(),
       status: "queued",
       ...(rep ? { rep } : {}),
+      ...(client ? { client } : {}),
     };
     this.write(job);
     return job;

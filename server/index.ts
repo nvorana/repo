@@ -119,12 +119,13 @@ app.get("/api/reviews", (_req, res) => {
   // List view stays light: omit transcripts and report bodies, but include
   // per-criterion scores so the UI can aggregate rep performance.
   res.json(
-    store.list().map(({ id, filename, createdAt, status, rep, error, result, coach }) => ({
+    store.list().map(({ id, filename, createdAt, status, rep, client, error, result, coach }) => ({
       id,
       filename,
       createdAt,
       status,
       rep,
+      client,
       error,
       coachReviewed: coach?.reviewed ?? false,
       hasCoachNotes: Boolean(coach?.notes),
@@ -183,7 +184,11 @@ app.post("/api/reviews", upload.single("audio"), (req, res) => {
   }
 
   const rep = typeof req.body.rep === "string" ? req.body.rep.trim().slice(0, 80) : "";
-  const job = store.create(req.file.originalname, rep || undefined);
+  const client = typeof req.body.client === "string" ? req.body.client.trim().slice(0, 120) : "";
+  if (!client) {
+    return res.status(400).json({ error: "Client name is required." });
+  }
+  const job = store.create(req.file.originalname, rep || undefined, client);
 
   // Keep the recording so coaches can replay moments from the report.
   try {
