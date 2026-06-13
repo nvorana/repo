@@ -459,7 +459,7 @@ function ReviewList({
           <li key={r.id}>
             <button
               onClick={() => onSelect(r.id)}
-              className="card card-body flex-row items-center gap-4 bg-base-200 p-4 text-left transition-colors hover:bg-base-300"
+              className="flex w-full items-center gap-4 rounded-box bg-base-200 p-4 text-left transition-colors hover:bg-base-300"
             >
               {pending ? (
                 <ScoreCircle className="bg-base-300 text-base-content/50">🔒</ScoreCircle>
