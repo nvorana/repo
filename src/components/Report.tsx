@@ -120,6 +120,20 @@ function MetricsStrip({ metrics }: { metrics: DeliveryMetrics }) {
   );
 }
 
+const IMPACT_RANK: Record<string, number> = { high: 0, medium: 1, low: 2 };
+
+function ImpactChip({ impact, tone }: { impact?: string; tone: "good" | "bad" }) {
+  if (!impact) return null;
+  if (tone === "good") {
+    // Only call out the standout strengths; don't clutter minor positives.
+    return impact === "high" ? <span className="badge badge-success badge-sm">Top strength</span> : null;
+  }
+  const cls =
+    impact === "high" ? "badge-error" : impact === "medium" ? "badge-warning" : "badge-ghost";
+  const label = impact === "high" ? "High impact" : impact === "medium" ? "Medium" : "Low";
+  return <span className={`badge badge-sm ${cls}`}>{label}</span>;
+}
+
 function FindingList({
   title,
   tone,
@@ -132,15 +146,22 @@ function FindingList({
   onSeek?: (seconds: number) => void;
 }) {
   const accent = tone === "good" ? "border-success" : "border-error";
+  // Biggest impact first; stable within the same impact level.
+  const sorted = [...items].sort(
+    (a, b) => (IMPACT_RANK[a.impact] ?? 1) - (IMPACT_RANK[b.impact] ?? 1),
+  );
   return (
     <section>
       <h2 className="mb-3 text-lg font-semibold">{title}</h2>
       <div className="space-y-3">
-        {items.map((f, i) => (
+        {sorted.map((f, i) => (
           <div key={i} className={`card border-l-4 ${accent} bg-base-200 p-4`}>
-            <div className="flex items-baseline justify-between gap-3">
+            <div className="flex items-start justify-between gap-3">
               <p className="font-medium">{f.point}</p>
-              <TsButton at={f.timestamp} onSeek={onSeek} />
+              <div className="flex shrink-0 items-center gap-2">
+                <ImpactChip impact={f.impact} tone={tone} />
+                <TsButton at={f.timestamp} onSeek={onSeek} />
+              </div>
             </div>
             <p className="mt-1 text-sm opacity-80">{f.detail}</p>
             <blockquote className="mt-2 border-l-2 border-base-300 pl-3 text-sm italic opacity-60">
@@ -148,7 +169,7 @@ function FindingList({
             </blockquote>
           </div>
         ))}
-        {items.length === 0 && <p className="text-sm opacity-50">Nothing noted.</p>}
+        {sorted.length === 0 && <p className="text-sm opacity-50">Nothing noted.</p>}
       </div>
     </section>
   );

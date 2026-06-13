@@ -94,6 +94,13 @@ const timestampedFinding = z.object({
   timestamp: z
     .string()
     .describe("Approximate position in the call, mm:ss format."),
+  impact: z
+    .enum(["high", "medium", "low"])
+    .describe(
+      "How much this affected the call's outcome. high = likely changed the " +
+        "result or a major coaching priority; medium = meaningful but not " +
+        "decisive; low = minor. List the highest-impact findings first.",
+    ),
 });
 
 export const objectionSchema = z.object({
