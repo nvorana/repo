@@ -1,7 +1,6 @@
 import "./env.ts";
 import express from "express";
 import multer from "multer";
-import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,6 +12,15 @@ import {
   type SalesFramework,
 } from "../core/index.ts";
 import { ReviewStore } from "./store.ts";
+import {
+  authEnabled,
+  clearSessionCookie,
+  requireAuth,
+  requireManager,
+  roleForPassword,
+  roleFromRequest,
+  setSessionCookie,
+} from "./auth.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT ?? 8787);
@@ -58,35 +66,41 @@ const upload = multer({
 });
 
 const app = express();
+app.set("trust proxy", 1); // behind Railway/Render's HTTPS proxy
 app.use(express.json());
-
-// --- Access gate -------------------------------------------------------------
-// When APP_PASSWORD is set (always set it for internet-facing deployments),
-// every request must carry it via HTTP Basic Auth — the browser shows a
-// native login prompt. Any username is accepted; only the password matters.
-const APP_PASSWORD = process.env.APP_PASSWORD;
-if (APP_PASSWORD) {
-  app.use((req, res, next) => {
-    const header = req.headers.authorization ?? "";
-    const [scheme, encoded] = header.split(" ");
-    if (scheme === "Basic" && encoded) {
-      const decoded = Buffer.from(encoded, "base64").toString("utf8");
-      const password = decoded.slice(decoded.indexOf(":") + 1);
-      const a = crypto.createHash("sha256").update(password).digest();
-      const b = crypto.createHash("sha256").update(APP_PASSWORD).digest();
-      if (crypto.timingSafeEqual(a, b)) return next();
-    }
-    res.set("WWW-Authenticate", 'Basic realm="CallCoach"').status(401).send("Password required");
-  });
-}
 
 app.get("/api/health", (_req, res) => {
   res.json({
     ok: true,
+    authEnabled: authEnabled(),
     anthropicKey: Boolean(process.env.ANTHROPIC_API_KEY),
     assemblyaiKey: Boolean(process.env.ASSEMBLYAI_API_KEY),
   });
 });
+
+// --- Auth: two shared role passwords (rep / manager) ------------------------
+app.post("/api/login", (req, res) => {
+  const role = roleForPassword(typeof req.body.password === "string" ? req.body.password : "");
+  if (!role) return res.status(401).json({ error: "Wrong password" });
+  setSessionCookie(req, res, role);
+  res.json({ role });
+});
+
+app.post("/api/logout", (_req, res) => {
+  clearSessionCookie(res);
+  res.json({ ok: true });
+});
+
+// Who am I? Drives which hero page the app shows.
+app.get("/api/me", (req, res) => {
+  if (!authEnabled()) return res.json({ role: "manager", authDisabled: true });
+  const role = roleFromRequest(req);
+  if (!role) return res.status(401).json({ error: "Not logged in" });
+  res.json({ role });
+});
+
+// Everything below requires a logged-in role.
+app.use("/api", requireAuth);
 
 app.get("/api/frameworks", (_req, res) => {
   const frameworks = loadFrameworks();
@@ -125,8 +139,8 @@ app.get("/api/reviews", (_req, res) => {
   );
 });
 
-app.post("/api/reviews/:id/coach", (req, res) => {
-  const job = store.get(req.params.id);
+app.post("/api/reviews/:id/coach", requireManager, (req, res) => {
+  const job = store.get(String(req.params.id));
   if (!job) return res.status(404).json({ error: "Review not found" });
   const notes = typeof req.body.notes === "string" ? req.body.notes.slice(0, 10_000) : "";
   const reviewed = Boolean(req.body.reviewed);

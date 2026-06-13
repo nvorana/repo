@@ -1,37 +1,53 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import {
   getReview,
+  getSession,
   isInProgress,
   listReviews,
+  login,
+  logout,
   saveCoachFeedback,
   STATUS_LABELS,
   type ReviewJob,
   type ReviewSummary,
+  type Role,
 } from "./api.ts";
 import { UploadCard } from "./components/UploadCard.tsx";
 import { Report } from "./components/Report.tsx";
 
 const POLL_MS = 4000;
+const NAME_KEY = "callcoach.rep";
 
 export default function App() {
+  // undefined = still checking session; null = not logged in
+  const [role, setRole] = useState<Role | null | undefined>(undefined);
+  const [tab, setTab] = useState<"team" | "mine">("team");
+  const [myName, setMyName] = useState<string>(() => localStorage.getItem(NAME_KEY) ?? "");
+
   const [reviews, setReviews] = useState<ReviewSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selected, setSelected] = useState<ReviewJob | null>(null);
+
+  useEffect(() => {
+    getSession()
+      .then(setRole)
+      .catch(() => setRole(null));
+  }, []);
 
   const refreshList = useCallback(() => {
     listReviews().then(setReviews).catch(console.error);
   }, []);
 
-  useEffect(refreshList, [refreshList]);
+  useEffect(() => {
+    if (role) refreshList();
+  }, [role, refreshList]);
 
-  // Poll the list while anything is processing.
   useEffect(() => {
     if (!reviews.some((r) => isInProgress(r.status))) return;
     const t = setInterval(refreshList, POLL_MS);
     return () => clearInterval(t);
   }, [reviews, refreshList]);
 
-  // Load + poll the selected review.
   useEffect(() => {
     if (!selectedId) return;
     let cancelled = false;
@@ -53,17 +69,59 @@ export default function App() {
     };
   }, [selectedId]);
 
+  function chooseName(name: string) {
+    localStorage.setItem(NAME_KEY, name);
+    setMyName(name);
+  }
+
+  async function handleLogout() {
+    await logout();
+    setRole(null);
+    setSelectedId(null);
+    setReviews([]);
+  }
+
+  if (role === undefined) {
+    return (
+      <div className="flex min-h-full items-center justify-center bg-slate-900 text-slate-400">
+        <Spinner />
+      </div>
+    );
+  }
+
+  if (role === null) {
+    return <LoginScreen onLogin={setRole} />;
+  }
+
+  const isManager = role === "manager";
+  const showingMine = !isManager || tab === "mine";
+
   return (
     <div className="min-h-full bg-slate-900 text-slate-100">
       <header className="print-hide border-b border-slate-800">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-6 gap-y-2 px-6 py-4">
           <button
             onClick={() => setSelectedId(null)}
             className="text-left text-xl font-semibold tracking-tight"
           >
             Call<span className="text-amber-400">Coach</span>
           </button>
-          <span className="text-sm text-slate-400">AI sales call review</span>
+          {isManager && !selectedId && (
+            <nav className="flex gap-1 rounded-lg bg-slate-800 p-1 text-sm">
+              <TabButton active={tab === "team"} onClick={() => setTab("team")}>
+                Team Coaching
+              </TabButton>
+              <TabButton active={tab === "mine"} onClick={() => setTab("mine")}>
+                My Coaching
+              </TabButton>
+            </nav>
+          )}
+          <div className="ml-auto flex items-center gap-4 text-sm text-slate-400">
+            <span>{isManager ? "Sales head" : "Salesperson"}</span>
+            <button onClick={() => void handleLogout()} className="hover:text-slate-200">
+              Log out
+            </button>
+          </div>
         </div>
       </header>
 
@@ -71,56 +129,274 @@ export default function App() {
         {selectedId ? (
           <DetailView
             job={selected?.id === selectedId ? selected : null}
+            canCoach={isManager}
             onUpdated={setSelected}
             onBack={() => {
               setSelectedId(null);
               refreshList();
             }}
           />
+        ) : showingMine ? (
+          myName ? (
+            <RepHome
+              reviews={reviews}
+              myName={myName}
+              onChangeName={() => chooseName("")}
+              onUploaded={(id) => {
+                refreshList();
+                setSelectedId(id);
+              }}
+              onSelect={setSelectedId}
+            />
+          ) : (
+            <NameGate reviews={reviews} onChoose={chooseName} />
+          )
         ) : (
-          <HomeView
-            reviews={reviews}
-            onUploaded={(id) => {
-              refreshList();
-              setSelectedId(id);
-            }}
-            onSelect={setSelectedId}
-          />
+          <ManagerHome reviews={reviews} onSelect={setSelectedId} />
         )}
       </main>
     </div>
   );
 }
 
-function HomeView({
+function TabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`rounded-md px-3 py-1 transition-colors ${
+        active ? "bg-slate-700 text-slate-100" : "text-slate-400 hover:text-slate-200"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+// --- Login ------------------------------------------------------------------
+
+function LoginScreen({ onLogin }: { onLogin: (role: Role) => void }) {
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      onLogin(await login(password));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Login failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex min-h-full items-center justify-center bg-slate-900 px-6">
+      <form onSubmit={submit} className="w-full max-w-sm">
+        <h1 className="text-center text-2xl font-semibold text-slate-100">
+          Call<span className="text-amber-400">Coach</span>
+        </h1>
+        <p className="mt-2 mb-6 text-center text-sm text-slate-400">
+          Enter your team password to continue.
+        </p>
+        <input
+          type="password"
+          autoFocus
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="Password"
+          className="w-full rounded-lg border border-slate-600 bg-slate-800 px-4 py-2.5 text-slate-100 placeholder:text-slate-500"
+        />
+        {error && <p className="mt-2 text-sm text-red-400">{error}</p>}
+        <button
+          type="submit"
+          disabled={busy || !password}
+          className="mt-4 w-full rounded-lg bg-amber-500 px-4 py-2.5 font-medium text-slate-900 hover:bg-amber-400 disabled:opacity-50"
+        >
+          {busy ? "Checking…" : "Log in"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+// --- Name gate (which salesperson am I?) ------------------------------------
+
+function NameGate({
   reviews,
+  onChoose,
+}: {
+  reviews: ReviewSummary[];
+  onChoose: (name: string) => void;
+}) {
+  const [name, setName] = useState("");
+  const known = [...new Set(reviews.map((r) => r.rep).filter((r): r is string => Boolean(r)))].sort();
+  return (
+    <div className="mx-auto max-w-md">
+      <h1 className="mb-1 text-2xl font-semibold">Who are you?</h1>
+      <p className="mb-5 text-slate-400">
+        Pick your name so your calls and coaching show up here. This is remembered on this device.
+      </p>
+      {known.length > 0 && (
+        <div className="mb-4 flex flex-wrap gap-2">
+          {known.map((n) => (
+            <button
+              key={n}
+              onClick={() => onChoose(n)}
+              className="rounded-full bg-slate-800 px-4 py-1.5 text-sm text-slate-200 hover:bg-slate-700"
+            >
+              {n}
+            </button>
+          ))}
+        </div>
+      )}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (name.trim()) onChoose(name.trim());
+        }}
+        className="flex gap-2"
+      >
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Type your name"
+          className="flex-1 rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-slate-100 placeholder:text-slate-500"
+        />
+        <button
+          type="submit"
+          disabled={!name.trim()}
+          className="rounded-lg bg-amber-500 px-4 py-2 font-medium text-slate-900 hover:bg-amber-400 disabled:opacity-50"
+        >
+          Continue
+        </button>
+      </form>
+    </div>
+  );
+}
+
+// --- Rep hero: "My Coaching" ------------------------------------------------
+
+function RepHome({
+  reviews,
+  myName,
+  onChangeName,
   onUploaded,
   onSelect,
 }: {
   reviews: ReviewSummary[];
+  myName: string;
+  onChangeName: () => void;
   onUploaded: (id: string) => void;
   onSelect: (id: string) => void;
 }) {
-  const [repFilter, setRepFilter] = useState<string>("");
-  const reps = [...new Set(reviews.map((r) => r.rep).filter((r): r is string => Boolean(r)))].sort();
-  const visible = repFilter ? reviews.filter((r) => r.rep === repFilter) : reviews;
+  const mine = reviews.filter((r) => r.rep === myName);
+  const stats = computeRepStats(mine).find((s) => s.rep === myName);
+
   return (
     <div className="space-y-10">
       <section>
-        <h1 className="mb-1 text-2xl font-semibold">Review a sales call</h1>
-        <p className="mb-5 text-slate-400">
-          Upload a one-on-one call recording. You'll get back what went right, what went
-          wrong, every objection (handled or missed), delivery analysis, and coaching
-          priorities.
-        </p>
-        <UploadCard onUploaded={onUploaded} />
+        <div className="mb-1 flex items-center gap-3">
+          <h1 className="text-2xl font-semibold">Hi {myName} 👋</h1>
+          <button onClick={onChangeName} className="text-xs text-slate-500 hover:text-slate-300">
+            (not you?)
+          </button>
+        </div>
+        <p className="text-slate-400">Your coaching dashboard — upload a call and see how you did.</p>
       </section>
+
+      {stats && (
+        <section className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-xl bg-slate-800/60 p-4">
+            <div className="text-3xl font-bold text-slate-100">{stats.avgScore.toFixed(1)}</div>
+            <div className="text-xs text-slate-400">average / 10 over {stats.calls} call{stats.calls === 1 ? "" : "s"}</div>
+          </div>
+          {stats.calls > 1 && (
+            <div className="rounded-xl bg-slate-800/60 p-4">
+              <div
+                className={`text-3xl font-bold ${
+                  stats.lastScore - stats.avgScore > 0.2
+                    ? "text-emerald-400"
+                    : stats.lastScore - stats.avgScore < -0.2
+                      ? "text-red-400"
+                      : "text-slate-100"
+                }`}
+              >
+                {stats.lastScore}
+              </div>
+              <div className="text-xs text-slate-400">your latest call</div>
+            </div>
+          )}
+          {stats.weakest && (
+            <div className="rounded-xl bg-amber-400/10 p-4">
+              <div className="text-sm font-semibold text-amber-300">Focus this week</div>
+              <div className="mt-1 text-sm text-slate-200">{stats.weakest.name}</div>
+              <div className="text-xs text-slate-400">your lowest skill (avg {stats.weakest.avg.toFixed(1)}/5)</div>
+            </div>
+          )}
+        </section>
+      )}
+
+      <section>
+        <h2 className="mb-3 text-lg font-semibold">Upload a call</h2>
+        <UploadCard onUploaded={onUploaded} fixedRep={myName} />
+      </section>
+
+      <section>
+        <h2 className="mb-3 text-lg font-semibold">Your calls</h2>
+        <ReviewList reviews={mine} onSelect={onSelect} showRep={false} />
+      </section>
+    </div>
+  );
+}
+
+// --- Manager hero: "Team Coaching" ------------------------------------------
+
+function ManagerHome({
+  reviews,
+  onSelect,
+}: {
+  reviews: ReviewSummary[];
+  onSelect: (id: string) => void;
+}) {
+  const queue = reviews.filter((r) => r.status === "completed" && !r.coachReviewed);
+  const [repFilter, setRepFilter] = useState<string>("");
+  const reps = [...new Set(reviews.map((r) => r.rep).filter((r): r is string => Boolean(r)))].sort();
+  const visible = repFilter ? reviews.filter((r) => r.rep === repFilter) : reviews;
+
+  return (
+    <div className="space-y-10">
+      <section>
+        <h1 className="mb-1 text-2xl font-semibold">Team coaching</h1>
+        <p className="text-slate-400">
+          {queue.length > 0
+            ? `${queue.length} call${queue.length === 1 ? "" : "s"} waiting for your review.`
+            : "All caught up — no calls waiting for coaching."}
+        </p>
+      </section>
+
+      {queue.length > 0 && (
+        <section>
+          <h2 className="mb-3 text-lg font-semibold">Coaching queue</h2>
+          <ReviewList reviews={queue} onSelect={onSelect} showRep />
+        </section>
+      )}
 
       <RepDashboard reviews={reviews} />
 
       <section>
         <div className="mb-3 flex items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold">Recent reviews</h2>
+          <h2 className="text-lg font-semibold">All reviews</h2>
           {reps.length > 0 && (
             <select
               value={repFilter}
@@ -136,54 +412,69 @@ function HomeView({
             </select>
           )}
         </div>
-        {visible.length === 0 ? (
-          <p className="text-sm text-slate-500">No calls reviewed yet.</p>
-        ) : (
-          <ul className="space-y-2">
-            {visible.map((r) => (
-              <li key={r.id}>
-                <button
-                  onClick={() => onSelect(r.id)}
-                  className="flex w-full items-center gap-4 rounded-xl bg-slate-800/60 px-4 py-3 text-left transition-colors hover:bg-slate-800"
-                >
-                  <ScoreBadge status={r.status} score={r.overallScore} />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="truncate font-medium">{r.filename}</span>
-                      {r.rep && (
-                        <span className="shrink-0 rounded-full bg-sky-500/20 px-2 py-0.5 text-xs text-sky-300">
-                          {r.rep}
-                        </span>
-                      )}
-                      {r.status === "completed" &&
-                        (r.coachReviewed ? (
-                          <span className="shrink-0 rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs text-emerald-300">
-                            Coached ✓
-                          </span>
-                        ) : (
-                          <span className="shrink-0 rounded-full border border-amber-400/40 px-2 py-0.5 text-xs text-amber-300">
-                            Awaiting coach
-                          </span>
-                        ))}
-                    </div>
-                    <div className="truncate text-sm text-slate-400">
-                      {r.status === "failed"
-                        ? r.error
-                        : (r.summary ?? STATUS_LABELS[r.status])}
-                    </div>
-                  </div>
-                  <span className="shrink-0 text-xs text-slate-500">
-                    {new Date(r.createdAt).toLocaleString()}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
+        <ReviewList reviews={visible} onSelect={onSelect} showRep />
       </section>
     </div>
   );
 }
+
+// --- Shared list ------------------------------------------------------------
+
+function ReviewList({
+  reviews,
+  onSelect,
+  showRep,
+}: {
+  reviews: ReviewSummary[];
+  onSelect: (id: string) => void;
+  showRep: boolean;
+}) {
+  if (reviews.length === 0) {
+    return <p className="text-sm text-slate-500">No calls here yet.</p>;
+  }
+  return (
+    <ul className="space-y-2">
+      {reviews.map((r) => (
+        <li key={r.id}>
+          <button
+            onClick={() => onSelect(r.id)}
+            className="flex w-full items-center gap-4 rounded-xl bg-slate-800/60 px-4 py-3 text-left transition-colors hover:bg-slate-800"
+          >
+            <ScoreBadge status={r.status} score={r.overallScore} />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span className="truncate font-medium">{r.filename}</span>
+                {showRep && r.rep && (
+                  <span className="shrink-0 rounded-full bg-sky-500/20 px-2 py-0.5 text-xs text-sky-300">
+                    {r.rep}
+                  </span>
+                )}
+                {r.status === "completed" &&
+                  (r.coachReviewed ? (
+                    <span className="shrink-0 rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs text-emerald-300">
+                      Coached ✓
+                    </span>
+                  ) : (
+                    <span className="shrink-0 rounded-full border border-amber-400/40 px-2 py-0.5 text-xs text-amber-300">
+                      Awaiting coach
+                    </span>
+                  ))}
+              </div>
+              <div className="truncate text-sm text-slate-400">
+                {r.status === "failed" ? r.error : (r.summary ?? STATUS_LABELS[r.status])}
+              </div>
+            </div>
+            <span className="shrink-0 text-xs text-slate-500">
+              {new Date(r.createdAt).toLocaleString()}
+            </span>
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+// --- Rep stats --------------------------------------------------------------
 
 interface RepStats {
   rep: string;
@@ -204,7 +495,6 @@ function computeRepStats(reviews: ReviewSummary[]): RepStats[] {
   }
   return [...byRep.entries()]
     .map(([rep, list]) => {
-      // list is newest-first from the API
       const scores = list.map((r) => r.overallScore!);
       const criteria = new Map<string, { name: string; scores: number[] }>();
       for (const r of list) {
@@ -312,7 +602,17 @@ function Spinner() {
   );
 }
 
-function CoachPanel({ job, onUpdated }: { job: ReviewJob; onUpdated: (job: ReviewJob) => void }) {
+// --- Coach panel ------------------------------------------------------------
+
+function CoachPanel({
+  job,
+  canEdit,
+  onUpdated,
+}: {
+  job: ReviewJob;
+  canEdit: boolean;
+  onUpdated: (job: ReviewJob) => void;
+}) {
   const [editing, setEditing] = useState(false);
   const [notes, setNotes] = useState(job.coach?.notes ?? "");
   const [reviewed, setReviewed] = useState(job.coach?.reviewed ?? false);
@@ -334,6 +634,10 @@ function CoachPanel({ job, onUpdated }: { job: ReviewJob; onUpdated: (job: Revie
   }
 
   const saved = job.coach;
+
+  // Reps with no feedback yet see nothing (keeps their page clean).
+  if (!canEdit && !saved?.notes) return null;
+
   return (
     <section className="mb-8 rounded-2xl border border-sky-500/30 bg-sky-500/5 p-5">
       <div className="flex items-center gap-3">
@@ -343,7 +647,7 @@ function CoachPanel({ job, onUpdated }: { job: ReviewJob; onUpdated: (job: Revie
             Reviewed with rep ✓
           </span>
         )}
-        {!editing && (
+        {canEdit && !editing && (
           <button
             onClick={() => setEditing(true)}
             className="print-hide ml-auto rounded-lg border border-slate-600 px-3 py-1 text-sm text-slate-300 hover:bg-slate-800"
@@ -358,8 +662,7 @@ function CoachPanel({ job, onUpdated }: { job: ReviewJob; onUpdated: (job: Revie
           <p className="mt-3 whitespace-pre-wrap text-sm text-slate-200">{saved.notes}</p>
         ) : (
           <p className="mt-3 text-sm text-slate-500">
-            No coach feedback yet — the sales head adds commendations and corrections here after
-            reading the report.
+            No coach feedback yet — add commendations and corrections here after reading the report.
           </p>
         )
       ) : (
@@ -404,12 +707,16 @@ function CoachPanel({ job, onUpdated }: { job: ReviewJob; onUpdated: (job: Revie
   );
 }
 
+// --- Detail view ------------------------------------------------------------
+
 function DetailView({
   job,
+  canCoach,
   onBack,
   onUpdated,
 }: {
   job: ReviewJob | null;
+  canCoach: boolean;
   onBack: () => void;
   onUpdated: (job: ReviewJob) => void;
 }) {
@@ -419,7 +726,7 @@ function DetailView({
         onClick={onBack}
         className="print-hide mb-6 text-sm text-slate-400 hover:text-slate-200"
       >
-        ← All reviews
+        ← Back
       </button>
 
       {!job ? (
@@ -447,7 +754,7 @@ function DetailView({
               🖨 Print / Save PDF
             </button>
           </div>
-          <CoachPanel job={job} onUpdated={onUpdated} />
+          <CoachPanel job={job} canEdit={canCoach} onUpdated={onUpdated} />
           <Report result={job.result} reviewId={job.id} />
         </div>
       )}
@@ -480,8 +787,8 @@ function ProgressView({ job }: { job: ReviewJob }) {
         ))}
       </ol>
       <p className="mt-6 text-sm text-slate-500">
-        Long calls can take a few minutes — transcription and review run in the background,
-        you can leave this page and come back.
+        Long calls can take a few minutes — transcription and review run in the background, you can
+        leave this page and come back.
       </p>
     </div>
   );

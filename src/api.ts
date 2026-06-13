@@ -53,7 +53,7 @@ export async function saveCoachFeedback(
   notes: string,
   reviewed: boolean,
 ): Promise<ReviewJob> {
-  const res = await fetch(`/api/reviews/${id}/coach`, {
+  const res = await api(`/api/reviews/${id}/coach`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ notes, reviewed }),
@@ -73,12 +73,41 @@ async function json<T>(res: Response): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+// All requests are same-origin; "same-origin" credentials send the session cookie.
+function api(path: string, init: RequestInit = {}): Promise<Response> {
+  return fetch(path, { credentials: "same-origin", ...init });
+}
+
+// --- Auth -------------------------------------------------------------------
+export type Role = "rep" | "manager";
+
+/** Returns the logged-in role, or null if not logged in / auth disabled-but-open. */
+export async function getSession(): Promise<Role | null> {
+  const res = await api("/api/me");
+  if (res.status === 401) return null;
+  const body = await json<{ role: Role }>(res);
+  return body.role;
+}
+
+export async function login(password: string): Promise<Role> {
+  const res = await api("/api/login", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ password }),
+  });
+  return (await json<{ role: Role }>(res)).role;
+}
+
+export async function logout(): Promise<void> {
+  await api("/api/logout", { method: "POST" });
+}
+
 export function listReviews(): Promise<ReviewSummary[]> {
-  return fetch("/api/reviews").then((r) => json<ReviewSummary[]>(r));
+  return api("/api/reviews").then((r) => json<ReviewSummary[]>(r));
 }
 
 export function getReview(id: string): Promise<ReviewJob> {
-  return fetch(`/api/reviews/${id}`).then((r) => json<ReviewJob>(r));
+  return api(`/api/reviews/${id}`).then((r) => json<ReviewJob>(r));
 }
 
 export async function uploadReview(
@@ -90,7 +119,7 @@ export async function uploadReview(
   form.append("audio", file);
   if (frameworkId) form.append("frameworkId", frameworkId);
   if (rep) form.append("rep", rep);
-  const res = await fetch("/api/reviews", { method: "POST", body: form });
+  const res = await api("/api/reviews", { method: "POST", body: form });
   return json<{ id: string }>(res);
 }
 
@@ -101,7 +130,7 @@ export interface FrameworkInfo {
 }
 
 export function listFrameworks(): Promise<FrameworkInfo[]> {
-  return fetch("/api/frameworks").then((r) => json<FrameworkInfo[]>(r));
+  return api("/api/frameworks").then((r) => json<FrameworkInfo[]>(r));
 }
 
 export const STATUS_LABELS: Record<JobStatus, string> = {

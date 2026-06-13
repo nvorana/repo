@@ -3,16 +3,21 @@ import { listFrameworks, uploadReview, type FrameworkInfo } from "../api.ts";
 
 interface Props {
   onUploaded: (id: string) => void;
+  /** When set, this rep is used and the salesperson field is hidden. */
+  fixedRep?: string;
 }
 
-export function UploadCard({ onUploaded }: Props) {
+export function UploadCard({ onUploaded, fixedRep }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [frameworks, setFrameworks] = useState<FrameworkInfo[]>([]);
   const [frameworkId, setFrameworkId] = useState<string>("");
-  const [rep, setRep] = useState<string>(() => localStorage.getItem("callcoach.rep") ?? "");
+  const [rep, setRep] = useState<string>(
+    () => fixedRep ?? localStorage.getItem("callcoach.rep") ?? "",
+  );
+  const effectiveRep = fixedRep ?? rep;
 
   useEffect(() => {
     listFrameworks()
@@ -29,8 +34,12 @@ export function UploadCard({ onUploaded }: Props) {
     setError(null);
     setBusy(true);
     try {
-      localStorage.setItem("callcoach.rep", rep);
-      const { id } = await uploadReview(file, frameworkId || undefined, rep.trim() || undefined);
+      if (!fixedRep) localStorage.setItem("callcoach.rep", rep);
+      const { id } = await uploadReview(
+        file,
+        frameworkId || undefined,
+        effectiveRep.trim() || undefined,
+      );
       onUploaded(id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
@@ -78,19 +87,21 @@ export function UploadCard({ onUploaded }: Props) {
         onChange={(e) => void handleFile(e.target.files?.[0])}
       />
       <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-3">
-        <div className="flex items-center gap-3">
-          <label htmlFor="rep" className="text-sm text-slate-400">
-            Salesperson:
-          </label>
-          <input
-            id="rep"
-            type="text"
-            value={rep}
-            onChange={(e) => setRep(e.target.value)}
-            placeholder="e.g. Maria"
-            className="w-44 rounded-lg border border-slate-600 bg-slate-800 px-3 py-1.5 text-sm text-slate-100 placeholder:text-slate-500"
-          />
-        </div>
+        {!fixedRep && (
+          <div className="flex items-center gap-3">
+            <label htmlFor="rep" className="text-sm text-slate-400">
+              Salesperson:
+            </label>
+            <input
+              id="rep"
+              type="text"
+              value={rep}
+              onChange={(e) => setRep(e.target.value)}
+              placeholder="e.g. Maria"
+              className="w-44 rounded-lg border border-slate-600 bg-slate-800 px-3 py-1.5 text-sm text-slate-100 placeholder:text-slate-500"
+            />
+          </div>
+        )}
         {frameworks.length > 1 && (
           <div className="flex items-center gap-3">
             <label htmlFor="framework" className="text-sm text-slate-400">
