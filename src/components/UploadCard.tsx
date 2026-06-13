@@ -65,96 +65,98 @@ export function UploadCard({ onUploaded, fixedRep }: Props) {
   }
 
   return (
-    <div>
-      <div className="mb-4">
-        <label htmlFor="client" className="mb-1 block text-sm font-medium text-slate-200">
-          Client name <span className="text-amber-400">*</span>
-        </label>
-        <input
-          id="client"
-          type="text"
-          value={client}
-          onChange={(e) => setClient(e.target.value)}
-          placeholder="Who was on the call? e.g. Jenny Reyes"
-          className="w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-slate-100 placeholder:text-slate-500"
-        />
-      </div>
-      <div
-        role="button"
-        tabIndex={0}
-        aria-disabled={!ready}
-        onClick={openPicker}
-        onKeyDown={(e) => e.key === "Enter" && openPicker()}
-        onDragOver={(e) => {
-          e.preventDefault();
-          if (ready) setDragging(true);
-        }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          setDragging(false);
-          void handleFile(e.dataTransfer.files[0]);
-        }}
-        className={`cursor-pointer rounded-2xl border-2 border-dashed p-10 text-center transition-colors ${
-          dragging
-            ? "border-amber-400 bg-amber-400/10"
-            : ready
-              ? "border-slate-600 bg-slate-800/40 hover:border-slate-400"
-              : "border-slate-700 bg-slate-800/20 opacity-60"
-        }`}
-      >
-        <p className="text-lg font-medium text-slate-100">
-          {busy ? "Uploading…" : "Drop a call recording here"}
-        </p>
-        <p className="mt-1 text-sm text-slate-400">
-          or click to browse — mp3, m4a, wav, ogg, webm
-        </p>
-      </div>
-      <input
-        ref={inputRef}
-        type="file"
-        accept="audio/*,.m4a,.mp3,.wav,.ogg,.webm,.flac,.aac"
-        className="hidden"
-        onChange={(e) => void handleFile(e.target.files?.[0])}
-      />
-      <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-3">
-        {!fixedRep && (
-          <div className="flex items-center gap-3">
-            <label htmlFor="rep" className="text-sm text-slate-400">
-              Salesperson:
+    <div className="card bg-base-200">
+      <div className="card-body gap-4">
+        <div className="flex flex-wrap gap-4">
+          {!fixedRep && (
+            <label className="flex flex-col">
+              <span className="label-text mb-1 text-sm opacity-70">Salesperson</span>
+              <input
+                type="text"
+                value={rep}
+                onChange={(e) => setRep(e.target.value)}
+                placeholder="e.g. Maria"
+                className="input input-bordered input-sm w-44"
+              />
             </label>
+          )}
+          <label className="flex flex-1 flex-col">
+            <span className="label-text mb-1 text-sm opacity-70">
+              Client name <span className="text-primary">*</span>
+            </span>
             <input
-              id="rep"
               type="text"
-              value={rep}
-              onChange={(e) => setRep(e.target.value)}
-              placeholder="e.g. Maria"
-              className="w-44 rounded-lg border border-slate-600 bg-slate-800 px-3 py-1.5 text-sm text-slate-100 placeholder:text-slate-500"
+              value={client}
+              onChange={(e) => setClient(e.target.value)}
+              placeholder="Who was on the call? e.g. Jenny Reyes"
+              className="input input-bordered input-sm w-full"
             />
-          </div>
-        )}
-        {frameworks.length > 1 && (
-          <div className="flex items-center gap-3">
-            <label htmlFor="framework" className="text-sm text-slate-400">
-              Review against:
+          </label>
+          {frameworks.length > 1 && (
+            <label className="flex flex-col">
+              <span className="label-text mb-1 text-sm opacity-70">Review against</span>
+              <select
+                value={frameworkId}
+                onChange={(e) => setFrameworkId(e.target.value)}
+                className="select select-bordered select-sm"
+              >
+                {frameworks.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.name}
+                    {f.isDefault ? " (default)" : ""}
+                  </option>
+                ))}
+              </select>
             </label>
-            <select
-              id="framework"
-              value={frameworkId}
-              onChange={(e) => setFrameworkId(e.target.value)}
-              className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-1.5 text-sm text-slate-100"
-            >
-              {frameworks.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.name}
-                  {f.isDefault ? " (default)" : ""}
-                </option>
-              ))}
-            </select>
+          )}
+        </div>
+
+        <div
+          role="button"
+          tabIndex={0}
+          aria-disabled={!ready}
+          onClick={openPicker}
+          onKeyDown={(e) => e.key === "Enter" && openPicker()}
+          onDragOver={(e) => {
+            e.preventDefault();
+            if (ready) setDragging(true);
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragging(false);
+            void handleFile(e.dataTransfer.files[0]);
+          }}
+          className={`cursor-pointer rounded-box border-2 border-dashed p-10 text-center transition-colors ${
+            dragging
+              ? "border-primary bg-primary/10"
+              : ready
+                ? "border-base-content/20 hover:border-base-content/40"
+                : "border-base-content/10 opacity-50"
+          }`}
+        >
+          {busy ? (
+            <span className="loading loading-spinner loading-lg text-primary" />
+          ) : (
+            <>
+              <p className="text-lg font-medium">Drop a call recording here</p>
+              <p className="mt-1 text-sm opacity-60">or click to browse — mp3, m4a, wav, ogg, webm</p>
+            </>
+          )}
+        </div>
+        <input
+          ref={inputRef}
+          type="file"
+          accept="audio/*,.m4a,.mp3,.wav,.ogg,.webm,.flac,.aac"
+          className="hidden"
+          onChange={(e) => void handleFile(e.target.files?.[0])}
+        />
+        {error && (
+          <div className="alert alert-error py-2 text-sm">
+            <span>{error}</span>
           </div>
         )}
       </div>
-      {error && <p className="mt-3 text-sm text-red-400">{error}</p>}
     </div>
   );
 }

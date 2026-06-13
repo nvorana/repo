@@ -26,7 +26,7 @@ export function Report({ result, reviewId }: { result: CallReviewResult; reviewI
   return (
     <div className="space-y-8">
       {hasAudio && (
-        <div className="print-hide sticky top-0 z-10 -mx-2 rounded-xl bg-slate-900/95 p-2 backdrop-blur">
+        <div className="print-hide sticky top-0 z-10 -mx-2 rounded-box bg-base-100/95 p-2 backdrop-blur">
           <audio
             ref={audioRef}
             controls
@@ -35,7 +35,7 @@ export function Report({ result, reviewId }: { result: CallReviewResult; reviewI
             onError={() => setHasAudio(false)}
             className="w-full"
           />
-          <p className="mt-1 px-1 text-xs text-slate-500">
+          <p className="mt-1 px-1 text-xs opacity-50">
             Click any timestamp in the report to jump to that moment in the call.
           </p>
         </div>
@@ -66,37 +66,33 @@ function TsButton({ at, onSeek }: { at: string; onSeek?: (seconds: number) => vo
   const seconds = parseTimestamp(at);
   if (onSeek && seconds !== null) {
     return (
-      <button
-        onClick={() => onSeek(seconds)}
-        title="Play this moment"
-        className="shrink-0 rounded bg-slate-700/70 px-1.5 py-0.5 text-xs text-amber-300 hover:bg-slate-600"
-      >
+      <button onClick={() => onSeek(seconds)} title="Play this moment" className="btn btn-xs btn-ghost text-primary">
         ▶ {at}
       </button>
     );
   }
-  return <span className="shrink-0 text-xs text-slate-500">{at}</span>;
+  return <span className="shrink-0 text-xs opacity-50">{at}</span>;
 }
 
 function Overview({ review }: { review: CallReview }) {
   const score = review.overallScore;
-  const tone = score >= 7 ? "text-emerald-400" : score >= 4 ? "text-amber-400" : "text-red-400";
+  const tone = score >= 7 ? "text-success" : score >= 4 ? "text-warning" : "text-error";
   return (
-    <section className="rounded-2xl bg-slate-800/60 p-6">
-      <div className="flex items-start gap-6">
+    <div className="card bg-base-200">
+      <div className="card-body flex-row items-start gap-6 p-6">
         <div className="shrink-0 text-center">
           <div className={`text-5xl font-bold ${tone}`}>{score}</div>
-          <div className="text-xs uppercase tracking-wide text-slate-400">/ 10</div>
+          <div className="text-xs uppercase tracking-wide opacity-50">/ 10</div>
         </div>
         <div>
-          <p className="text-slate-200">{review.summary}</p>
-          <p className="mt-3 text-sm text-slate-400">
-            <span className="font-semibold text-slate-300">Outcome: </span>
+          <p>{review.summary}</p>
+          <p className="mt-3 text-sm opacity-70">
+            <span className="font-semibold">Outcome: </span>
             {review.callOutcome}
           </p>
         </div>
       </div>
-    </section>
+    </div>
   );
 }
 
@@ -115,9 +111,9 @@ function MetricsStrip({ metrics }: { metrics: DeliveryMetrics }) {
   return (
     <section className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
       {cells.map(([label, value]) => (
-        <div key={label} className="rounded-xl bg-slate-800/60 p-3 text-center">
-          <div className="text-lg font-semibold text-slate-100">{value}</div>
-          <div className="mt-0.5 text-xs text-slate-400">{label}</div>
+        <div key={label} className="card bg-base-200 p-3 text-center">
+          <div className="text-lg font-semibold">{value}</div>
+          <div className="mt-0.5 text-xs opacity-60">{label}</div>
         </div>
       ))}
     </section>
@@ -135,33 +131,33 @@ function FindingList({
   items: CallReview["whatWentRight"];
   onSeek?: (seconds: number) => void;
 }) {
-  const accent = tone === "good" ? "border-emerald-500/50" : "border-red-500/50";
+  const accent = tone === "good" ? "border-success" : "border-error";
   return (
     <section>
-      <h2 className="mb-3 text-lg font-semibold text-slate-100">{title}</h2>
+      <h2 className="mb-3 text-lg font-semibold">{title}</h2>
       <div className="space-y-3">
         {items.map((f, i) => (
-          <div key={i} className={`rounded-xl border-l-4 ${accent} bg-slate-800/60 p-4`}>
+          <div key={i} className={`card border-l-4 ${accent} bg-base-200 p-4`}>
             <div className="flex items-baseline justify-between gap-3">
-              <p className="font-medium text-slate-100">{f.point}</p>
+              <p className="font-medium">{f.point}</p>
               <TsButton at={f.timestamp} onSeek={onSeek} />
             </div>
-            <p className="mt-1 text-sm text-slate-300">{f.detail}</p>
-            <blockquote className="mt-2 border-l-2 border-slate-600 pl-3 text-sm italic text-slate-400">
+            <p className="mt-1 text-sm opacity-80">{f.detail}</p>
+            <blockquote className="mt-2 border-l-2 border-base-300 pl-3 text-sm italic opacity-60">
               “{f.quote}”
             </blockquote>
           </div>
         ))}
-        {items.length === 0 && <p className="text-sm text-slate-500">Nothing noted.</p>}
+        {items.length === 0 && <p className="text-sm opacity-50">Nothing noted.</p>}
       </div>
     </section>
   );
 }
 
 const HANDLED_BADGE: Record<Objection["handled"], [string, string]> = {
-  handled: ["Handled", "bg-emerald-500/20 text-emerald-300"],
-  partially_handled: ["Partially handled", "bg-amber-500/20 text-amber-300"],
-  unhandled: ["Never handled", "bg-red-500/20 text-red-300"],
+  handled: ["Handled", "badge-success"],
+  partially_handled: ["Partially handled", "badge-warning"],
+  unhandled: ["Never handled", "badge-error"],
 };
 
 function Objections({
@@ -173,46 +169,42 @@ function Objections({
 }) {
   return (
     <section>
-      <h2 className="mb-1 text-lg font-semibold text-slate-100">Objections & concerns</h2>
-      <p className="mb-3 text-sm text-slate-400">
+      <h2 className="mb-1 text-lg font-semibold">Objections &amp; concerns</h2>
+      <p className="mb-3 text-sm opacity-60">
         Including implicit concerns the prospect signaled but never said outright.
       </p>
       <div className="space-y-3">
         {objections.map((o, i) => {
           const [label, badge] = HANDLED_BADGE[o.handled];
           return (
-            <div key={i} className="rounded-xl bg-slate-800/60 p-4">
+            <div key={i} className="card bg-base-200 p-4">
               <div className="flex flex-wrap items-center gap-2">
-                <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${badge}`}>
-                  {label}
-                </span>
-                <span className="rounded-full bg-slate-700 px-2.5 py-0.5 text-xs text-slate-300">
+                <span className={`badge badge-sm ${badge}`}>{label}</span>
+                <span className="badge badge-ghost badge-sm">
                   {o.kind === "implicit" ? "Implicit — not stated outright" : "Explicit"}
                 </span>
                 <span className="ml-auto">
                   <TsButton at={o.timestamp} onSeek={onSeek} />
                 </span>
               </div>
-              <p className="mt-2 font-medium text-slate-100">{o.summary}</p>
-              <blockquote className="mt-2 border-l-2 border-slate-600 pl-3 text-sm italic text-slate-400">
+              <p className="mt-2 font-medium">{o.summary}</p>
+              <blockquote className="mt-2 border-l-2 border-base-300 pl-3 text-sm italic opacity-60">
                 “{o.quote}”
               </blockquote>
               {o.howItWasHandled && (
-                <p className="mt-2 text-sm text-slate-300">
-                  <span className="font-semibold text-slate-200">What the rep did: </span>
+                <p className="mt-2 text-sm opacity-80">
+                  <span className="font-semibold">What the rep did: </span>
                   {o.howItWasHandled}
                 </p>
               )}
-              <p className="mt-2 rounded-lg bg-slate-900/60 p-3 text-sm text-amber-200/90">
-                <span className="font-semibold text-amber-300">Better approach: </span>
+              <div className="mt-2 rounded-box bg-warning/10 p-3 text-sm">
+                <span className="font-semibold text-warning">Better approach: </span>
                 {o.recommendedHandling}
-              </p>
+              </div>
             </div>
           );
         })}
-        {objections.length === 0 && (
-          <p className="text-sm text-slate-500">No objections detected.</p>
-        )}
+        {objections.length === 0 && <p className="text-sm opacity-50">No objections detected.</p>}
       </div>
     </section>
   );
@@ -229,14 +221,12 @@ function Delivery({ review }: { review: CallReview }) {
   ];
   return (
     <section>
-      <h2 className="mb-3 text-lg font-semibold text-slate-100">Tonality & delivery</h2>
-      <div className="space-y-px overflow-hidden rounded-xl">
+      <h2 className="mb-3 text-lg font-semibold">Tonality &amp; delivery</h2>
+      <div className="card divide-y divide-base-300 overflow-hidden bg-base-200">
         {rows.map(([label, text]) => (
-          <div key={label} className="bg-slate-800/60 p-4">
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-              {label}
-            </div>
-            <p className="mt-1 text-sm text-slate-200">{text}</p>
+          <div key={label} className="p-4">
+            <div className="text-xs font-semibold uppercase tracking-wide opacity-50">{label}</div>
+            <p className="mt-1 text-sm opacity-90">{text}</p>
           </div>
         ))}
       </div>
@@ -247,23 +237,22 @@ function Delivery({ review }: { review: CallReview }) {
 function Scorecard({ review }: { review: CallReview }) {
   return (
     <section>
-      <h2 className="mb-3 text-lg font-semibold text-slate-100">Scorecard</h2>
-      <div className="space-y-3 rounded-xl bg-slate-800/60 p-4">
+      <h2 className="mb-3 text-lg font-semibold">Scorecard</h2>
+      <div className="card space-y-3 bg-base-200 p-4">
         {review.scorecard.map((item) => (
           <div key={item.criterionId}>
             <div className="flex items-center justify-between gap-3">
-              <span className="text-sm font-medium text-slate-200">{item.criterionName}</span>
-              <span className="text-sm text-slate-400">{item.score}/5</span>
+              <span className="text-sm font-medium">{item.criterionName}</span>
+              <span className="text-sm opacity-60">{item.score}/5</span>
             </div>
-            <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-700">
-              <div
-                className={`h-full rounded-full ${
-                  item.score >= 4 ? "bg-emerald-400" : item.score >= 3 ? "bg-amber-400" : "bg-red-400"
-                }`}
-                style={{ width: `${(item.score / 5) * 100}%` }}
-              />
-            </div>
-            <p className="mt-1 text-xs text-slate-400">{item.rationale}</p>
+            <progress
+              className={`progress mt-1 w-full ${
+                item.score >= 4 ? "progress-success" : item.score >= 3 ? "progress-warning" : "progress-error"
+              }`}
+              value={item.score}
+              max={5}
+            />
+            <p className="mt-1 text-xs opacity-60">{item.rationale}</p>
           </div>
         ))}
       </div>
@@ -275,19 +264,17 @@ function Coaching({ review }: { review: CallReview }) {
   const items = [...review.coaching].sort((a, b) => a.priority - b.priority);
   return (
     <section>
-      <h2 className="mb-3 text-lg font-semibold text-slate-100">Coaching priorities</h2>
+      <h2 className="mb-3 text-lg font-semibold">Coaching priorities</h2>
       <ol className="space-y-3">
         {items.map((c) => (
-          <li key={c.priority} className="flex gap-4 rounded-xl bg-slate-800/60 p-4">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-400/20 font-semibold text-amber-300">
-              {c.priority}
-            </div>
+          <li key={c.priority} className="card flex-row gap-4 bg-base-200 p-4">
+            <div className="badge badge-warning badge-lg shrink-0 font-semibold">{c.priority}</div>
             <div>
-              <p className="font-medium text-slate-100">{c.title}</p>
-              <p className="mt-1 text-sm text-slate-300">{c.advice}</p>
-              <p className="mt-2 rounded-lg bg-slate-900/60 p-3 text-sm italic text-slate-300">
+              <p className="font-medium">{c.title}</p>
+              <p className="mt-1 text-sm opacity-80">{c.advice}</p>
+              <div className="mt-2 rounded-box bg-base-300/60 p-3 text-sm italic">
                 Try: “{c.example}”
-              </p>
+              </div>
             </div>
           </li>
         ))}
@@ -315,14 +302,11 @@ function TranscriptView({
   const [open, setOpen] = useState(false);
   return (
     <section className="print-hide">
-      <button
-        onClick={() => setOpen(!open)}
-        className="mb-3 text-lg font-semibold text-slate-100 hover:text-amber-300"
-      >
+      <button onClick={() => setOpen(!open)} className="mb-3 text-lg font-semibold hover:text-primary">
         Full transcript {open ? "▾" : "▸"}
       </button>
       {open && (
-        <div className="max-h-[32rem] space-y-3 overflow-y-auto rounded-xl bg-slate-800/60 p-4">
+        <div className="card max-h-[32rem] space-y-3 overflow-y-auto bg-base-200 p-4">
           {transcript.utterances.map((u, i) => (
             <div key={i} className="flex gap-3">
               <div className="w-20 shrink-0 pt-0.5">
@@ -331,12 +315,12 @@ function TranscriptView({
               <div>
                 <span
                   className={`text-xs font-semibold uppercase tracking-wide ${
-                    u.role === "salesperson" ? "text-amber-300" : "text-sky-300"
+                    u.role === "salesperson" ? "text-primary" : "text-info"
                   }`}
                 >
                   {u.role === "salesperson" ? "Rep" : "Prospect"}
                 </span>
-                <p className="text-sm text-slate-300">{u.text}</p>
+                <p className="text-sm opacity-80">{u.text}</p>
               </div>
             </div>
           ))}

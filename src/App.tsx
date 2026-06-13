@@ -19,7 +19,6 @@ const POLL_MS = 4000;
 const NAME_KEY = "callcoach.rep";
 
 export default function App() {
-  // undefined = still checking session; null = not logged in
   const [role, setRole] = useState<Role | null | undefined>(undefined);
   const [tab, setTab] = useState<"team" | "mine">("team");
   const [myName, setMyName] = useState<string>(() => localStorage.getItem(NAME_KEY) ?? "");
@@ -83,8 +82,8 @@ export default function App() {
 
   if (role === undefined) {
     return (
-      <div className="flex min-h-full items-center justify-center bg-slate-900 text-slate-400">
-        <Spinner />
+      <div className="flex min-h-full items-center justify-center bg-base-100">
+        <span className="loading loading-spinner loading-lg text-primary" />
       </div>
     );
   }
@@ -97,32 +96,62 @@ export default function App() {
   const showingMine = !isManager || tab === "mine";
 
   return (
-    <div className="min-h-full bg-slate-900 text-slate-100">
-      <header className="print-hide border-b border-slate-800">
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-6 gap-y-2 px-6 py-4">
-          <button
-            onClick={() => setSelectedId(null)}
-            className="text-left text-xl font-semibold tracking-tight"
-          >
-            Call<span className="text-amber-400">Coach</span>
-          </button>
-          {isManager && !selectedId && (
-            <nav className="flex gap-1 rounded-lg bg-slate-800 p-1 text-sm">
-              <TabButton active={tab === "team"} onClick={() => setTab("team")}>
-                Team Coaching
-              </TabButton>
-              <TabButton active={tab === "mine"} onClick={() => setTab("mine")}>
-                My Coaching
-              </TabButton>
-            </nav>
-          )}
-          <div className="ml-auto flex items-center gap-4 text-sm text-slate-400">
-            <span>{isManager ? "Sales head" : "Salesperson"}</span>
-            <button onClick={() => void handleLogout()} className="hover:text-slate-200">
+    <div className="min-h-full bg-base-100 text-base-content">
+      <header className="print-hide border-b border-base-300 bg-base-200/40">
+        <div className="navbar mx-auto max-w-5xl px-6">
+          <div className="flex-1">
+            <button
+              onClick={() => setSelectedId(null)}
+              className="text-xl font-bold tracking-tight"
+            >
+              Call<span className="text-primary">Coach</span>
+            </button>
+            {isManager && !selectedId && (
+              <div role="tablist" className="tabs tabs-box ml-6 hidden sm:flex">
+                <button
+                  role="tab"
+                  className={`tab ${tab === "team" ? "tab-active" : ""}`}
+                  onClick={() => setTab("team")}
+                >
+                  Team Coaching
+                </button>
+                <button
+                  role="tab"
+                  className={`tab ${tab === "mine" ? "tab-active" : ""}`}
+                  onClick={() => setTab("mine")}
+                >
+                  My Coaching
+                </button>
+              </div>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="badge badge-ghost badge-sm">
+              {isManager ? "Sales head" : "Salesperson"}
+            </span>
+            <button onClick={() => void handleLogout()} className="btn btn-ghost btn-sm">
               Log out
             </button>
           </div>
         </div>
+        {isManager && !selectedId && (
+          <div role="tablist" className="tabs tabs-box mx-auto mb-2 max-w-5xl px-6 sm:hidden">
+            <button
+              role="tab"
+              className={`tab flex-1 ${tab === "team" ? "tab-active" : ""}`}
+              onClick={() => setTab("team")}
+            >
+              Team
+            </button>
+            <button
+              role="tab"
+              className={`tab flex-1 ${tab === "mine" ? "tab-active" : ""}`}
+              onClick={() => setTab("mine")}
+            >
+              My Coaching
+            </button>
+          </div>
+        )}
       </header>
 
       <main className="mx-auto max-w-5xl px-6 py-8">
@@ -159,27 +188,6 @@ export default function App() {
   );
 }
 
-function TabButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`rounded-md px-3 py-1 transition-colors ${
-        active ? "bg-slate-700 text-slate-100" : "text-slate-400 hover:text-slate-200"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
 // --- Login ------------------------------------------------------------------
 
 function LoginScreen({ onLogin }: { onLogin: (role: Role) => void }) {
@@ -201,36 +209,42 @@ function LoginScreen({ onLogin }: { onLogin: (role: Role) => void }) {
   }
 
   return (
-    <div className="flex min-h-full items-center justify-center bg-slate-900 px-6">
-      <form onSubmit={submit} className="w-full max-w-sm">
-        <h1 className="text-center text-2xl font-semibold text-slate-100">
-          Call<span className="text-amber-400">Coach</span>
-        </h1>
-        <p className="mt-2 mb-6 text-center text-sm text-slate-400">
-          Enter your team password to continue.
-        </p>
-        <input
-          type="password"
-          autoFocus
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder="Password"
-          className="w-full rounded-lg border border-slate-600 bg-slate-800 px-4 py-2.5 text-slate-100 placeholder:text-slate-500"
-        />
-        {error && <p className="mt-2 text-sm text-red-400">{error}</p>}
-        <button
-          type="submit"
-          disabled={busy || !password}
-          className="mt-4 w-full rounded-lg bg-amber-500 px-4 py-2.5 font-medium text-slate-900 hover:bg-amber-400 disabled:opacity-50"
-        >
-          {busy ? "Checking…" : "Log in"}
-        </button>
-      </form>
+    <div className="flex min-h-full items-center justify-center bg-base-100 px-6">
+      <div className="card w-full max-w-sm bg-base-200 shadow-xl">
+        <form onSubmit={submit} className="card-body">
+          <h1 className="text-center text-2xl font-bold">
+            Call<span className="text-primary">Coach</span>
+          </h1>
+          <p className="mb-2 text-center text-sm opacity-60">
+            Enter your team password to continue.
+          </p>
+          <input
+            type="password"
+            autoFocus
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Password"
+            className="input input-bordered w-full"
+          />
+          {error && (
+            <div className="alert alert-error py-2 text-sm">
+              <span>{error}</span>
+            </div>
+          )}
+          <button
+            type="submit"
+            disabled={busy || !password}
+            className="btn btn-primary mt-2 w-full"
+          >
+            {busy ? <span className="loading loading-spinner loading-sm" /> : "Log in"}
+          </button>
+        </form>
+      </div>
     </div>
   );
 }
 
-// --- Name gate (which salesperson am I?) ------------------------------------
+// --- Name gate --------------------------------------------------------------
 
 function NameGate({
   reviews,
@@ -243,18 +257,14 @@ function NameGate({
   const known = [...new Set(reviews.map((r) => r.rep).filter((r): r is string => Boolean(r)))].sort();
   return (
     <div className="mx-auto max-w-md">
-      <h1 className="mb-1 text-2xl font-semibold">Who are you?</h1>
-      <p className="mb-5 text-slate-400">
+      <h1 className="mb-1 text-2xl font-bold">Who are you?</h1>
+      <p className="mb-5 opacity-60">
         Pick your name so your calls and coaching show up here. This is remembered on this device.
       </p>
       {known.length > 0 && (
         <div className="mb-4 flex flex-wrap gap-2">
           {known.map((n) => (
-            <button
-              key={n}
-              onClick={() => onChoose(n)}
-              className="rounded-full bg-slate-800 px-4 py-1.5 text-sm text-slate-200 hover:bg-slate-700"
-            >
+            <button key={n} onClick={() => onChoose(n)} className="btn btn-outline btn-sm">
               {n}
             </button>
           ))}
@@ -265,19 +275,15 @@ function NameGate({
           e.preventDefault();
           if (name.trim()) onChoose(name.trim());
         }}
-        className="flex gap-2"
+        className="join w-full"
       >
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="Type your name"
-          className="flex-1 rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-slate-100 placeholder:text-slate-500"
+          className="input input-bordered join-item flex-1"
         />
-        <button
-          type="submit"
-          disabled={!name.trim()}
-          className="rounded-lg bg-amber-500 px-4 py-2 font-medium text-slate-900 hover:bg-amber-400 disabled:opacity-50"
-        >
+        <button type="submit" disabled={!name.trim()} className="btn btn-primary join-item">
           Continue
         </button>
       </form>
@@ -307,41 +313,51 @@ function RepHome({
     <div className="space-y-10">
       <section>
         <div className="mb-1 flex items-center gap-3">
-          <h1 className="text-2xl font-semibold">Hi {myName} 👋</h1>
-          <button onClick={onChangeName} className="text-xs text-slate-500 hover:text-slate-300">
+          <h1 className="text-2xl font-bold">Hi {myName} 👋</h1>
+          <button onClick={onChangeName} className="link link-hover text-xs opacity-60">
             (not you?)
           </button>
         </div>
-        <p className="text-slate-400">Your coaching dashboard — upload a call and see how you did.</p>
+        <p className="opacity-60">Your coaching dashboard — upload a call and see how you did.</p>
       </section>
 
       {stats && (
-        <section className="grid gap-3 sm:grid-cols-3">
-          <div className="rounded-xl bg-slate-800/60 p-4">
-            <div className="text-3xl font-bold text-slate-100">{stats.avgScore.toFixed(1)}</div>
-            <div className="text-xs text-slate-400">average / 10 over {stats.calls} call{stats.calls === 1 ? "" : "s"}</div>
+        <section className="stats stats-vertical w-full bg-base-200 shadow sm:stats-horizontal">
+          <div className="stat">
+            <div className="stat-title">Average score</div>
+            <div className="stat-value text-primary">{stats.avgScore.toFixed(1)}</div>
+            <div className="stat-desc">
+              over {stats.calls} call{stats.calls === 1 ? "" : "s"}
+            </div>
           </div>
           {stats.calls > 1 && (
-            <div className="rounded-xl bg-slate-800/60 p-4">
+            <div className="stat">
+              <div className="stat-title">Latest call</div>
               <div
-                className={`text-3xl font-bold ${
+                className={`stat-value ${
                   stats.lastScore - stats.avgScore > 0.2
-                    ? "text-emerald-400"
+                    ? "text-success"
                     : stats.lastScore - stats.avgScore < -0.2
-                      ? "text-red-400"
-                      : "text-slate-100"
+                      ? "text-error"
+                      : ""
                 }`}
               >
                 {stats.lastScore}
               </div>
-              <div className="text-xs text-slate-400">your latest call</div>
+              <div className="stat-desc">
+                {stats.lastScore - stats.avgScore > 0.2
+                  ? "↑ above your average"
+                  : stats.lastScore - stats.avgScore < -0.2
+                    ? "↓ below your average"
+                    : "→ around your average"}
+              </div>
             </div>
           )}
           {stats.weakest && (
-            <div className="rounded-xl bg-amber-400/10 p-4">
-              <div className="text-sm font-semibold text-amber-300">Focus this week</div>
-              <div className="mt-1 text-sm text-slate-200">{stats.weakest.name}</div>
-              <div className="text-xs text-slate-400">your lowest skill (avg {stats.weakest.avg.toFixed(1)}/5)</div>
+            <div className="stat">
+              <div className="stat-title text-warning">Focus this week</div>
+              <div className="stat-value text-base">{stats.weakest.name}</div>
+              <div className="stat-desc">lowest skill — avg {stats.weakest.avg.toFixed(1)}/5</div>
             </div>
           )}
         </section>
@@ -377,8 +393,8 @@ function ManagerHome({
   return (
     <div className="space-y-10">
       <section>
-        <h1 className="mb-1 text-2xl font-semibold">Team coaching</h1>
-        <p className="text-slate-400">
+        <h1 className="mb-1 text-2xl font-bold">Team coaching</h1>
+        <p className="opacity-60">
           {queue.length > 0
             ? `${queue.length} call${queue.length === 1 ? "" : "s"} waiting for your review.`
             : "All caught up — no calls waiting for coaching."}
@@ -387,7 +403,10 @@ function ManagerHome({
 
       {queue.length > 0 && (
         <section>
-          <h2 className="mb-3 text-lg font-semibold">Coaching queue</h2>
+          <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold">
+            Coaching queue
+            <span className="badge badge-warning badge-sm">{queue.length}</span>
+          </h2>
           <ReviewList reviews={queue} onSelect={onSelect} showRep />
         </section>
       )}
@@ -401,7 +420,7 @@ function ManagerHome({
             <select
               value={repFilter}
               onChange={(e) => setRepFilter(e.target.value)}
-              className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-1.5 text-sm text-slate-100"
+              className="select select-bordered select-sm"
             >
               <option value="">All salespeople</option>
               {reps.map((rep) => (
@@ -430,48 +449,39 @@ function ReviewList({
   showRep: boolean;
 }) {
   if (reviews.length === 0) {
-    return <p className="text-sm text-slate-500">No calls here yet.</p>;
+    return <p className="text-sm opacity-50">No calls here yet.</p>;
   }
   return (
     <ul className="space-y-2">
       {reviews.map((r) => {
-        // A rep viewing an unreleased completed call: no score is sent.
         const pending = r.status === "completed" && r.overallScore == null && r.released === false;
         return (
           <li key={r.id}>
             <button
               onClick={() => onSelect(r.id)}
-              className="flex w-full items-center gap-4 rounded-xl bg-slate-800/60 px-4 py-3 text-left transition-colors hover:bg-slate-800"
+              className="card card-body flex-row items-center gap-4 bg-base-200 p-4 text-left transition-colors hover:bg-base-300"
             >
               {pending ? (
-                <Badge className="bg-slate-700 text-slate-400">🔒</Badge>
+                <ScoreCircle className="bg-base-300 text-base-content/50">🔒</ScoreCircle>
               ) : (
                 <ScoreBadge status={r.status} score={r.overallScore} />
               )}
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <span className="truncate font-medium">{r.client ?? r.filename}</span>
-                  {showRep && r.rep && (
-                    <span className="shrink-0 rounded-full bg-sky-500/20 px-2 py-0.5 text-xs text-sky-300">
-                      {r.rep}
-                    </span>
-                  )}
+                  {showRep && r.rep && <span className="badge badge-info badge-sm">{r.rep}</span>}
                   {r.status === "completed" &&
                     (pending ? (
-                      <span className="shrink-0 rounded-full border border-slate-500/40 px-2 py-0.5 text-xs text-slate-400">
-                        Pending your coach
-                      </span>
+                      <span className="badge badge-ghost badge-sm">Pending your coach</span>
                     ) : r.coachReviewed ? (
-                      <span className="shrink-0 rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs text-emerald-300">
-                        Coached ✓
-                      </span>
+                      <span className="badge badge-success badge-sm">Coached ✓</span>
                     ) : (
-                      <span className="shrink-0 rounded-full border border-amber-400/40 px-2 py-0.5 text-xs text-amber-300">
+                      <span className="badge badge-warning badge-outline badge-sm">
                         Awaiting coach
                       </span>
                     ))}
                 </div>
-                <div className="truncate text-sm text-slate-400">
+                <div className="truncate text-sm opacity-60">
                   {r.status === "failed"
                     ? r.error
                     : pending
@@ -479,8 +489,8 @@ function ReviewList({
                       : (r.summary ?? STATUS_LABELS[r.status])}
                 </div>
               </div>
-              <span className="shrink-0 text-xs text-slate-500">
-                {new Date(r.createdAt).toLocaleString()}
+              <span className="shrink-0 text-xs opacity-50">
+                {new Date(r.createdAt).toLocaleDateString()}
               </span>
             </button>
           </li>
@@ -540,40 +550,41 @@ function RepDashboard({ reviews }: { reviews: ReviewSummary[] }) {
   return (
     <section>
       <h2 className="mb-1 text-lg font-semibold">By salesperson</h2>
-      <p className="mb-3 text-sm text-slate-400">
+      <p className="mb-3 text-sm opacity-60">
         Where each rep stands across their reviewed calls — and the single skill to coach next.
       </p>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {stats.map((s) => {
           const trend = s.lastScore - s.avgScore;
           return (
-            <div key={s.rep} className="rounded-xl bg-slate-800/60 p-4">
-              <div className="flex items-baseline justify-between gap-2">
-                <span className="truncate font-semibold text-slate-100">{s.rep}</span>
-                <span className="shrink-0 text-xs text-slate-500">
-                  {s.calls} call{s.calls === 1 ? "" : "s"}
-                </span>
-              </div>
-              <div className="mt-2 flex items-end gap-3">
-                <span className="text-3xl font-bold text-slate-100">{s.avgScore.toFixed(1)}</span>
-                <span className="pb-1 text-xs text-slate-400">avg / 10</span>
-                {s.calls > 1 && (
-                  <span
-                    className={`pb-1 text-xs ${
-                      trend > 0.2 ? "text-emerald-400" : trend < -0.2 ? "text-red-400" : "text-slate-500"
-                    }`}
-                  >
-                    {trend > 0.2 ? "↑ improving" : trend < -0.2 ? "↓ slipping" : "→ steady"} (last:{" "}
-                    {s.lastScore})
+            <div key={s.rep} className="card bg-base-200 shadow-sm">
+              <div className="card-body p-4">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="truncate font-semibold">{s.rep}</span>
+                  <span className="text-xs opacity-50">
+                    {s.calls} call{s.calls === 1 ? "" : "s"}
                   </span>
+                </div>
+                <div className="flex items-end gap-3">
+                  <span className="text-3xl font-bold">{s.avgScore.toFixed(1)}</span>
+                  <span className="pb-1 text-xs opacity-60">avg / 10</span>
+                  {s.calls > 1 && (
+                    <span
+                      className={`pb-1 text-xs ${
+                        trend > 0.2 ? "text-success" : trend < -0.2 ? "text-error" : "opacity-50"
+                      }`}
+                    >
+                      {trend > 0.2 ? "↑ improving" : trend < -0.2 ? "↓ slipping" : "→ steady"}
+                    </span>
+                  )}
+                </div>
+                {s.weakest && (
+                  <div className="mt-1 rounded-box bg-base-300/60 p-2.5 text-xs">
+                    <span className="font-semibold text-warning">Coach next: </span>
+                    {s.weakest.name} (avg {s.weakest.avg.toFixed(1)}/5)
+                  </div>
                 )}
               </div>
-              {s.weakest && (
-                <p className="mt-3 rounded-lg bg-slate-900/60 p-2.5 text-xs text-slate-300">
-                  <span className="font-semibold text-amber-300">Coach next: </span>
-                  {s.weakest.name} (avg {s.weakest.avg.toFixed(1)}/5)
-                </p>
-              )}
             </div>
           );
         })}
@@ -582,40 +593,30 @@ function RepDashboard({ reviews }: { reviews: ReviewSummary[] }) {
   );
 }
 
-function ScoreBadge({ status, score }: { status: ReviewSummary["status"]; score?: number }) {
-  if (status === "failed") {
-    return <Badge className="bg-red-500/20 text-red-300">✕</Badge>;
-  }
-  if (score == null) {
-    return (
-      <Badge className="bg-slate-700 text-slate-300">
-        <Spinner />
-      </Badge>
-    );
-  }
-  const tone =
-    score >= 7
-      ? "bg-emerald-500/20 text-emerald-300"
-      : score >= 4
-        ? "bg-amber-500/20 text-amber-300"
-        : "bg-red-500/20 text-red-300";
-  return <Badge className={tone}>{score}</Badge>;
-}
-
-function Badge({ className, children }: { className: string; children: ReactNode }) {
+function ScoreCircle({ className, children }: { className: string; children: ReactNode }) {
   return (
     <span
-      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full font-semibold ${className}`}
+      className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-lg font-bold ${className}`}
     >
       {children}
     </span>
   );
 }
 
-function Spinner() {
-  return (
-    <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-500 border-t-transparent" />
-  );
+function ScoreBadge({ status, score }: { status: ReviewSummary["status"]; score?: number }) {
+  if (status === "failed") {
+    return <ScoreCircle className="bg-error/20 text-error">✕</ScoreCircle>;
+  }
+  if (score == null) {
+    return (
+      <ScoreCircle className="bg-base-300 text-base-content/60">
+        <span className="loading loading-spinner loading-sm" />
+      </ScoreCircle>
+    );
+  }
+  const tone =
+    score >= 7 ? "bg-success/20 text-success" : score >= 4 ? "bg-warning/20 text-warning" : "bg-error/20 text-error";
+  return <ScoreCircle className={tone}>{score}</ScoreCircle>;
 }
 
 // --- Coach panel ------------------------------------------------------------
@@ -651,104 +652,87 @@ function CoachPanel({
   }
 
   const saved = job.coach;
-
-  // Reps with no feedback yet see nothing (keeps their page clean).
   if (!canEdit && !saved?.notes) return null;
 
   return (
-    <section className="mb-8 rounded-2xl border border-sky-500/30 bg-sky-500/5 p-5">
-      <div className="flex flex-wrap items-center gap-2">
-        <h2 className="text-lg font-semibold text-slate-100">Coach's notes</h2>
-        {saved?.released ? (
-          <span className="rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-xs font-medium text-emerald-300">
-            Released to rep ✓
-          </span>
-        ) : (
-          canEdit && (
-            <span className="rounded-full border border-amber-400/40 px-2.5 py-0.5 text-xs text-amber-300">
-              Not released yet
-            </span>
-          )
-        )}
-        {saved?.reviewed && (
-          <span className="rounded-full bg-slate-700 px-2.5 py-0.5 text-xs text-slate-300">
-            Discussed with rep ✓
-          </span>
-        )}
-        {canEdit && !editing && (
-          <button
-            onClick={() => setEditing(true)}
-            className="print-hide ml-auto rounded-lg border border-slate-600 px-3 py-1 text-sm text-slate-300 hover:bg-slate-800"
-          >
-            {saved?.notes || saved?.released ? "Edit" : "Add notes"}
-          </button>
-        )}
-      </div>
+    <div className="card mb-8 border border-info/30 bg-info/5">
+      <div className="card-body p-5">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-lg font-semibold">Coach's notes</h2>
+          {saved?.released ? (
+            <span className="badge badge-success badge-sm">Released to rep ✓</span>
+          ) : (
+            canEdit && <span className="badge badge-warning badge-outline badge-sm">Not released yet</span>
+          )}
+          {saved?.reviewed && <span className="badge badge-ghost badge-sm">Discussed with rep ✓</span>}
+          {canEdit && !editing && (
+            <button onClick={() => setEditing(true)} className="print-hide btn btn-outline btn-sm ml-auto">
+              {saved?.notes || saved?.released ? "Edit" : "Add notes"}
+            </button>
+          )}
+        </div>
 
-      {!editing ? (
-        saved?.notes ? (
-          <p className="mt-3 whitespace-pre-wrap text-sm text-slate-200">{saved.notes}</p>
+        {!editing ? (
+          saved?.notes ? (
+            <p className="whitespace-pre-wrap text-sm">{saved.notes}</p>
+          ) : (
+            <p className="text-sm opacity-50">
+              No coach feedback yet — add commendations and corrections here after reading the
+              report.
+            </p>
+          )
         ) : (
-          <p className="mt-3 text-sm text-slate-500">
-            No coach feedback yet — add commendations and corrections here after reading the report.
-          </p>
-        )
-      ) : (
-        <div className="print-hide mt-3 space-y-3">
-          <textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            rows={5}
-            placeholder="What this rep should keep doing, stop doing, and try on the next call…"
-            className="w-full rounded-lg border border-slate-600 bg-slate-900 p-3 text-sm text-slate-100 placeholder:text-slate-500"
-          />
-          <div className="space-y-2">
-            <label className="flex items-center gap-2 text-sm text-slate-300">
-              <input
-                type="checkbox"
-                checked={reviewed}
-                onChange={(e) => setReviewed(e.target.checked)}
-                className="h-4 w-4"
-              />
-              I've discussed this call with the salesperson (1:1 done)
-            </label>
-            <label className="flex items-center gap-2 text-sm text-slate-300">
-              <input
-                type="checkbox"
-                checked={released}
-                onChange={(e) => setReleased(e.target.checked)}
-                className="h-4 w-4"
-              />
-              <span>
-                Release the report so the salesperson can see it
-                <span className="block text-xs text-slate-500">
-                  Until you tick this, the rep can't see their score or report — only that it's
-                  awaiting your review.
+          <div className="print-hide space-y-3">
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={5}
+              placeholder="What this rep should keep doing, stop doing, and try on the next call…"
+              className="textarea textarea-bordered w-full"
+            />
+            <div className="space-y-2">
+              <label className="flex cursor-pointer items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={reviewed}
+                  onChange={(e) => setReviewed(e.target.checked)}
+                  className="checkbox checkbox-sm"
+                />
+                I've discussed this call with the salesperson (1:1 done)
+              </label>
+              <label className="flex cursor-pointer items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={released}
+                  onChange={(e) => setReleased(e.target.checked)}
+                  className="checkbox checkbox-sm mt-0.5"
+                />
+                <span>
+                  Release the report so the salesperson can see it
+                  <span className="block text-xs opacity-50">
+                    Until you tick this, the rep can't see their score or report — only that it's
+                    awaiting your review.
+                  </span>
                 </span>
-              </span>
-            </label>
-          </div>
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="ml-auto flex gap-2">
-              <button
-                onClick={() => setEditing(false)}
-                className="rounded-lg px-3 py-1.5 text-sm text-slate-400 hover:text-slate-200"
-              >
+              </label>
+            </div>
+            <div className="flex items-center justify-end gap-2">
+              <button onClick={() => setEditing(false)} className="btn btn-ghost btn-sm">
                 Cancel
               </button>
-              <button
-                onClick={() => void save()}
-                disabled={saving}
-                className="rounded-lg bg-sky-500/80 px-4 py-1.5 text-sm font-medium text-white hover:bg-sky-500 disabled:opacity-50"
-              >
-                {saving ? "Saving…" : "Save"}
+              <button onClick={() => void save()} disabled={saving} className="btn btn-primary btn-sm">
+                {saving ? <span className="loading loading-spinner loading-sm" /> : "Save"}
               </button>
             </div>
+            {error && (
+              <div className="alert alert-error py-2 text-sm">
+                <span>{error}</span>
+              </div>
+            )}
           </div>
-          {error && <p className="text-sm text-red-400">{error}</p>}
-        </div>
-      )}
-    </section>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -767,19 +751,18 @@ function DetailView({
 }) {
   return (
     <div>
-      <button
-        onClick={onBack}
-        className="print-hide mb-6 text-sm text-slate-400 hover:text-slate-200"
-      >
+      <button onClick={onBack} className="print-hide btn btn-ghost btn-sm mb-6">
         ← Back
       </button>
 
       {!job ? (
-        <p className="text-slate-400">Loading…</p>
+        <span className="loading loading-spinner text-primary" />
       ) : job.status === "failed" ? (
-        <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-6">
-          <p className="font-medium text-red-300">Review failed</p>
-          <p className="mt-1 text-sm text-red-200/80">{job.error}</p>
+        <div className="alert alert-error">
+          <div>
+            <p className="font-medium">Review failed</p>
+            <p className="text-sm opacity-80">{job.error}</p>
+          </div>
         </div>
       ) : job.status === "completed" && !job.result && !canCoach ? (
         <PendingReleaseView client={job.client} />
@@ -788,18 +771,9 @@ function DetailView({
       ) : (
         <div>
           <div className="mb-6 flex flex-wrap items-center gap-3">
-            <h1 className="min-w-0 truncate text-2xl font-semibold">
-              {job.client ?? job.filename}
-            </h1>
-            {job.rep && (
-              <span className="rounded-full bg-sky-500/20 px-3 py-1 text-sm text-sky-300">
-                {job.rep}
-              </span>
-            )}
-            <button
-              onClick={() => window.print()}
-              className="print-hide ml-auto rounded-lg border border-slate-600 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800"
-            >
+            <h1 className="min-w-0 truncate text-2xl font-bold">{job.client ?? job.filename}</h1>
+            {job.rep && <span className="badge badge-info">{job.rep}</span>}
+            <button onClick={() => window.print()} className="print-hide btn btn-outline btn-sm ml-auto">
               🖨 Print / Save PDF
             </button>
           </div>
@@ -813,15 +787,17 @@ function DetailView({
 
 function PendingReleaseView({ client }: { client?: string }) {
   return (
-    <div className="rounded-2xl bg-slate-800/60 p-8 text-center">
-      <div className="text-4xl">🔒</div>
-      <h2 className="mt-3 text-lg font-semibold text-slate-100">
-        Your coach is reviewing this call{client ? ` with ${client}` : ""}
-      </h2>
-      <p className="mx-auto mt-2 max-w-md text-sm text-slate-400">
-        The AI review is done, but your sales head goes over it with you first. You'll see the full
-        report and feedback here right after your 1:1.
-      </p>
+    <div className="card bg-base-200">
+      <div className="card-body items-center py-12 text-center">
+        <div className="text-5xl">🔒</div>
+        <h2 className="mt-2 text-lg font-semibold">
+          Your coach is reviewing this call{client ? ` with ${client}` : ""}
+        </h2>
+        <p className="max-w-md text-sm opacity-60">
+          The AI review is done, but your sales head goes over it with you first. You'll see the full
+          report and feedback here right after your 1:1.
+        </p>
+      </div>
     </div>
   );
 }
@@ -831,29 +807,24 @@ const STAGES = ["queued", "transcribing", "identifying_speakers", "analyzing"] a
 function ProgressView({ job }: { job: ReviewJob }) {
   const current = STAGES.indexOf(job.status as (typeof STAGES)[number]);
   return (
-    <div className="rounded-2xl bg-slate-800/60 p-8">
-      <div className="mb-6 flex items-center gap-3">
-        <Spinner />
-        <span className="font-medium">{STATUS_LABELS[job.status]}</span>
-      </div>
-      <ol className="space-y-2">
-        {STAGES.map((stage, i) => (
-          <li key={stage} className="flex items-center gap-3 text-sm">
-            <span
-              className={`h-2 w-2 rounded-full ${
-                i < current ? "bg-emerald-400" : i === current ? "bg-amber-400" : "bg-slate-600"
-              }`}
-            />
-            <span className={i <= current ? "text-slate-200" : "text-slate-500"}>
+    <div className="card bg-base-200">
+      <div className="card-body">
+        <div className="mb-4 flex items-center gap-3">
+          <span className="loading loading-spinner text-primary" />
+          <span className="font-medium">{STATUS_LABELS[job.status]}</span>
+        </div>
+        <ul className="steps steps-vertical">
+          {STAGES.map((stage, i) => (
+            <li key={stage} className={`step ${i <= current ? "step-primary" : ""}`}>
               {STATUS_LABELS[stage]}
-            </span>
-          </li>
-        ))}
-      </ol>
-      <p className="mt-6 text-sm text-slate-500">
-        Long calls can take a few minutes — transcription and review run in the background, you can
-        leave this page and come back.
-      </p>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-4 text-sm opacity-50">
+          Long calls can take a few minutes — transcription and review run in the background, you can
+          leave this page and come back.
+        </p>
+      </div>
     </div>
   );
 }
