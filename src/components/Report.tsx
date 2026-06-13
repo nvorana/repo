@@ -1,30 +1,44 @@
-import { useRef, useState } from "react";
+import { useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type {
   CallReview,
   CallReviewResult,
+  CoachingItem,
   DeliveryMetrics,
   Objection,
+  TimestampedFinding,
   Transcript,
 } from "../../core/types.ts";
 import { audioUrl } from "../api.ts";
+
+type Tab = "summary" | "winsmisses" | "objections" | "delivery" | "scorecard" | "coaching" | "transcript";
+
+const TABS: { id: Tab; label: string }[] = [
+  { id: "summary", label: "Summary" },
+  { id: "winsmisses", label: "Wins & Misses" },
+  { id: "objections", label: "Objections" },
+  { id: "delivery", label: "Delivery" },
+  { id: "scorecard", label: "Scorecard" },
+  { id: "coaching", label: "Coaching" },
+  { id: "transcript", label: "Transcript" },
+];
 
 export function Report({ result, reviewId }: { result: CallReviewResult; reviewId: string }) {
   const { review, metrics } = result;
   const audioRef = useRef<HTMLAudioElement>(null);
   const [hasAudio, setHasAudio] = useState(true);
+  const [tab, setTab] = useState<Tab>("summary");
 
   function seek(seconds: number) {
     const el = audioRef.current;
     if (!el) return;
-    el.currentTime = Math.max(0, seconds - 3); // small lead-in for context
+    el.currentTime = Math.max(0, seconds - 3);
     void el.play();
     el.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }
-
   const onSeek = hasAudio ? seek : undefined;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-5">
       {hasAudio && (
         <div className="print-hide sticky top-0 z-10 -mx-2 rounded-box bg-base-100/95 p-2 backdrop-blur">
           <audio
@@ -36,24 +50,194 @@ export function Report({ result, reviewId }: { result: CallReviewResult; reviewI
             className="w-full"
           />
           <p className="mt-1 px-1 text-xs opacity-50">
-            Click any timestamp in the report to jump to that moment in the call.
+            Tip: click any ▶ timestamp anywhere in the report to hear that exact moment.
           </p>
         </div>
       )}
-      <Overview review={review} />
-      <MetricsStrip metrics={metrics} />
-      <div className="grid gap-6 lg:grid-cols-2">
-        <FindingList title="What went right" tone="good" items={review.whatWentRight} onSeek={onSeek} />
-        <FindingList title="What went wrong" tone="bad" items={review.whatWentWrong} onSeek={onSeek} />
+
+      {/* Tabs hide in print; print shows everything sequentially below. */}
+      <div role="tablist" className="tabs tabs-border print-hide overflow-x-auto">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            role="tab"
+            className={`tab whitespace-nowrap ${tab === t.id ? "tab-active" : ""}`}
+            onClick={() => setTab(t.id)}
+          >
+            {t.label}
+          </button>
+        ))}
       </div>
-      <Objections objections={review.objections} onSeek={onSeek} />
-      <Delivery review={review} />
-      <Scorecard review={review} />
-      <Coaching review={review} />
-      <TranscriptView transcript={result.transcript} onSeek={onSeek} />
+
+      {/* On screen: show only the active tab. In print: show all sections. */}
+      <Pane show={tab === "summary"}>
+        <Summary review={review} onSeek={onSeek} onJump={setTab} />
+      </Pane>
+      <Pane show={tab === "winsmisses"}>
+        <div className="grid gap-6 lg:grid-cols-2">
+          <FindingList title="What went right" tone="good" items={review.whatWentRight} onSeek={onSeek} />
+          <FindingList title="What went wrong" tone="bad" items={review.whatWentWrong} onSeek={onSeek} />
+        </div>
+      </Pane>
+      <Pane show={tab === "objections"}>
+        <Objections objections={review.objections} onSeek={onSeek} />
+      </Pane>
+      <Pane show={tab === "delivery"}>
+        <MetricsStrip metrics={metrics} />
+        <div className="mt-5">
+          <Delivery review={review} />
+        </div>
+      </Pane>
+      <Pane show={tab === "scorecard"}>
+        <Scorecard review={review} />
+      </Pane>
+      <Pane show={tab === "coaching"}>
+        <Coaching review={review} />
+      </Pane>
+      <Pane show={tab === "transcript"}>
+        <TranscriptView transcript={result.transcript} onSeek={onSeek} />
+      </Pane>
     </div>
   );
 }
+
+// Renders children when active (screen). For print, a parallel block below
+// renders everything; here we just gate the on-screen single-tab view.
+function Pane({ show, children }: { show: boolean; children: ReactNode }) {
+  return <div className={`report-pane ${show ? "" : "hidden"}`}>{children}</div>;
+}
+
+const IMPACT_RANK: Record<string, number> = { high: 0, medium: 1, low: 2 };
+
+function sortByImpact<T extends { impact: string }>(items: T[]): T[] {
+  return [...items].sort((a, b) => (IMPACT_RANK[a.impact] ?? 1) - (IMPACT_RANK[b.impact] ?? 1));
+}
+
+function verdict(score: number): { label: string; tone: string } {
+  if (score >= 8) return { label: "Strong call", tone: "text-success" };
+  if (score >= 6) return { label: "Solid, with gaps", tone: "text-success" };
+  if (score >= 4) return { label: "Needs work", tone: "text-warning" };
+  return { label: "Rough call", tone: "text-error" };
+}
+
+// --- Summary (the calm landing) ---------------------------------------------
+
+function Summary({
+  review,
+  onSeek,
+  onJump,
+}: {
+  review: CallReview;
+  onSeek?: (s: number) => void;
+  onJump: (t: Tab) => void;
+}) {
+  const v = verdict(review.overallScore);
+  const topWin = sortByImpact(review.whatWentRight)[0];
+  const topMiss = sortByImpact(review.whatWentWrong)[0];
+  const topFocus = [...review.coaching].sort((a, b) => a.priority - b.priority)[0];
+
+  return (
+    <div className="space-y-5">
+      <div className="card bg-base-200">
+        <div className="card-body gap-4 p-6">
+          <div className="flex items-center gap-5">
+            <div
+              className="radial-progress shrink-0 text-3xl font-bold"
+              style={
+                {
+                  "--value": review.overallScore * 10,
+                  "--size": "5.5rem",
+                  "--thickness": "0.5rem",
+                } as CSSProperties
+              }
+              role="progressbar"
+            >
+              <span className={v.tone}>{review.overallScore}</span>
+            </div>
+            <div>
+              <div className={`text-xl font-bold ${v.tone}`}>{v.label}</div>
+              <div className="text-sm opacity-60">Overall score {review.overallScore} / 10</div>
+            </div>
+          </div>
+          <p className="text-sm leading-relaxed opacity-90">{review.summary}</p>
+          <div className="rounded-box bg-base-300/50 p-3 text-sm">
+            <span className="font-semibold">Outcome: </span>
+            {review.callOutcome}
+          </div>
+        </div>
+      </div>
+
+      {topFocus && (
+        <div className="card border border-primary/30 bg-primary/5">
+          <div className="card-body p-5">
+            <div className="flex items-center gap-2">
+              <span className="badge badge-primary badge-sm">#1 focus next time</span>
+            </div>
+            <p className="text-lg font-semibold">{topFocus.title}</p>
+            <p className="text-sm opacity-80">{topFocus.advice}</p>
+            <div className="mt-1 rounded-box bg-base-100/60 p-3 text-sm italic">
+              Try: “{topFocus.example}”
+            </div>
+            <button onClick={() => onJump("coaching")} className="btn btn-ghost btn-sm mt-1 self-start">
+              See all coaching →
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        {topWin && (
+          <HighlightCard
+            kind="win"
+            finding={topWin}
+            onSeek={onSeek}
+            onMore={() => onJump("winsmisses")}
+          />
+        )}
+        {topMiss && (
+          <HighlightCard
+            kind="miss"
+            finding={topMiss}
+            onSeek={onSeek}
+            onMore={() => onJump("winsmisses")}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function HighlightCard({
+  kind,
+  finding,
+  onSeek,
+  onMore,
+}: {
+  kind: "win" | "miss";
+  finding: TimestampedFinding;
+  onSeek?: (s: number) => void;
+  onMore: () => void;
+}) {
+  const isWin = kind === "win";
+  return (
+    <div className={`card border-l-4 ${isWin ? "border-success" : "border-error"} bg-base-200`}>
+      <div className="card-body gap-2 p-4">
+        <div className="flex items-center justify-between">
+          <span className={`text-xs font-semibold uppercase tracking-wide ${isWin ? "text-success" : "text-error"}`}>
+            {isWin ? "Biggest win" : "Biggest miss"}
+          </span>
+          <TsButton at={finding.timestamp} onSeek={onSeek} />
+        </div>
+        <p className="font-medium">{finding.point}</p>
+        <button onClick={onMore} className="link link-hover self-start text-xs opacity-60">
+          more detail →
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// --- Shared bits ------------------------------------------------------------
 
 function parseTimestamp(ts: string): number | null {
   const m = ts.trim().match(/^(?:(\d+):)?(\d{1,2}):(\d{2})$/);
@@ -74,28 +258,6 @@ function TsButton({ at, onSeek }: { at: string; onSeek?: (seconds: number) => vo
   return <span className="shrink-0 text-xs opacity-50">{at}</span>;
 }
 
-function Overview({ review }: { review: CallReview }) {
-  const score = review.overallScore;
-  const tone = score >= 7 ? "text-success" : score >= 4 ? "text-warning" : "text-error";
-  return (
-    <div className="card bg-base-200">
-      <div className="card-body flex-row items-start gap-6 p-6">
-        <div className="shrink-0 text-center">
-          <div className={`text-5xl font-bold ${tone}`}>{score}</div>
-          <div className="text-xs uppercase tracking-wide opacity-50">/ 10</div>
-        </div>
-        <div>
-          <p>{review.summary}</p>
-          <p className="mt-3 text-sm opacity-70">
-            <span className="font-semibold">Outcome: </span>
-            {review.callOutcome}
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function MetricsStrip({ metrics }: { metrics: DeliveryMetrics }) {
   const minutes = Math.round(metrics.durationMs / 60000);
   const talk = Math.round(metrics.salespersonTalkRatio * 100);
@@ -111,7 +273,7 @@ function MetricsStrip({ metrics }: { metrics: DeliveryMetrics }) {
   return (
     <section className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
       {cells.map(([label, value]) => (
-        <div key={label} className="card bg-base-200 p-3 text-center">
+        <div key={label} className="rounded-box bg-base-200 p-3 text-center">
           <div className="text-lg font-semibold">{value}</div>
           <div className="mt-0.5 text-xs opacity-60">{label}</div>
         </div>
@@ -120,16 +282,12 @@ function MetricsStrip({ metrics }: { metrics: DeliveryMetrics }) {
   );
 }
 
-const IMPACT_RANK: Record<string, number> = { high: 0, medium: 1, low: 2 };
-
 function ImpactChip({ impact, tone }: { impact?: string; tone: "good" | "bad" }) {
   if (!impact) return null;
   if (tone === "good") {
-    // Only call out the standout strengths; don't clutter minor positives.
     return impact === "high" ? <span className="badge badge-success badge-sm">Top strength</span> : null;
   }
-  const cls =
-    impact === "high" ? "badge-error" : impact === "medium" ? "badge-warning" : "badge-ghost";
+  const cls = impact === "high" ? "badge-error" : impact === "medium" ? "badge-warning" : "badge-ghost";
   const label = impact === "high" ? "High impact" : impact === "medium" ? "Medium" : "Low";
   return <span className={`badge badge-sm ${cls}`}>{label}</span>;
 }
@@ -142,14 +300,11 @@ function FindingList({
 }: {
   title: string;
   tone: "good" | "bad";
-  items: CallReview["whatWentRight"];
+  items: TimestampedFinding[];
   onSeek?: (seconds: number) => void;
 }) {
   const accent = tone === "good" ? "border-success" : "border-error";
-  // Biggest impact first; stable within the same impact level.
-  const sorted = [...items].sort(
-    (a, b) => (IMPACT_RANK[a.impact] ?? 1) - (IMPACT_RANK[b.impact] ?? 1),
-  );
+  const sorted = sortByImpact(items);
   return (
     <section>
       <h2 className="mb-3 text-lg font-semibold">{title}</h2>
@@ -188,14 +343,22 @@ function Objections({
   objections: Objection[];
   onSeek?: (seconds: number) => void;
 }) {
+  // Unhandled first, then partially handled — the riskiest gaps on top.
+  const order: Record<Objection["handled"], number> = {
+    unhandled: 0,
+    partially_handled: 1,
+    handled: 2,
+  };
+  const sorted = [...objections].sort((a, b) => order[a.handled] - order[b.handled]);
   return (
     <section>
       <h2 className="mb-1 text-lg font-semibold">Objections &amp; concerns</h2>
       <p className="mb-3 text-sm opacity-60">
-        Including implicit concerns the prospect signaled but never said outright.
+        Including implicit concerns the prospect signaled but never said outright. Unresolved ones
+        first.
       </p>
       <div className="space-y-3">
-        {objections.map((o, i) => {
+        {sorted.map((o, i) => {
           const [label, badge] = HANDLED_BADGE[o.handled];
           return (
             <div key={i} className="card bg-base-200 p-4">
@@ -225,7 +388,7 @@ function Objections({
             </div>
           );
         })}
-        {objections.length === 0 && <p className="text-sm opacity-50">No objections detected.</p>}
+        {sorted.length === 0 && <p className="text-sm opacity-50">No objections detected.</p>}
       </div>
     </section>
   );
@@ -282,7 +445,7 @@ function Scorecard({ review }: { review: CallReview }) {
 }
 
 function Coaching({ review }: { review: CallReview }) {
-  const items = [...review.coaching].sort((a, b) => a.priority - b.priority);
+  const items: CoachingItem[] = [...review.coaching].sort((a, b) => a.priority - b.priority);
   return (
     <section>
       <h2 className="mb-3 text-lg font-semibold">Coaching priorities</h2>
@@ -293,9 +456,7 @@ function Coaching({ review }: { review: CallReview }) {
             <div>
               <p className="font-medium">{c.title}</p>
               <p className="mt-1 text-sm opacity-80">{c.advice}</p>
-              <div className="mt-2 rounded-box bg-base-300/60 p-3 text-sm italic">
-                Try: “{c.example}”
-              </div>
+              <div className="mt-2 rounded-box bg-base-300/60 p-3 text-sm italic">Try: “{c.example}”</div>
             </div>
           </li>
         ))}
@@ -320,33 +481,28 @@ function TranscriptView({
   transcript: Transcript;
   onSeek?: (seconds: number) => void;
 }) {
-  const [open, setOpen] = useState(false);
   return (
-    <section className="print-hide">
-      <button onClick={() => setOpen(!open)} className="mb-3 text-lg font-semibold hover:text-primary">
-        Full transcript {open ? "▾" : "▸"}
-      </button>
-      {open && (
-        <div className="card max-h-[32rem] space-y-3 overflow-y-auto bg-base-200 p-4">
-          {transcript.utterances.map((u, i) => (
-            <div key={i} className="flex gap-3">
-              <div className="w-20 shrink-0 pt-0.5">
-                <TsButton at={formatMs(u.startMs)} onSeek={onSeek} />
-              </div>
-              <div>
-                <span
-                  className={`text-xs font-semibold uppercase tracking-wide ${
-                    u.role === "salesperson" ? "text-primary" : "text-info"
-                  }`}
-                >
-                  {u.role === "salesperson" ? "Rep" : "Prospect"}
-                </span>
-                <p className="text-sm opacity-80">{u.text}</p>
-              </div>
+    <section>
+      <h2 className="mb-3 text-lg font-semibold">Full transcript</h2>
+      <div className="card max-h-[36rem] space-y-3 overflow-y-auto bg-base-200 p-4">
+        {transcript.utterances.map((u, i) => (
+          <div key={i} className="flex gap-3">
+            <div className="w-20 shrink-0 pt-0.5">
+              <TsButton at={formatMs(u.startMs)} onSeek={onSeek} />
             </div>
-          ))}
-        </div>
-      )}
+            <div>
+              <span
+                className={`text-xs font-semibold uppercase tracking-wide ${
+                  u.role === "salesperson" ? "text-primary" : "text-info"
+                }`}
+              >
+                {u.role === "salesperson" ? "Rep" : "Prospect"}
+              </span>
+              <p className="text-sm opacity-80">{u.text}</p>
+            </div>
+          </div>
+        ))}
+      </div>
     </section>
   );
 }

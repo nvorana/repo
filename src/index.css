@@ -83,4 +83,8 @@ body {
   section {
     break-inside: avoid-page;
   }
+  /* The report uses tabs on screen; for print, reveal every tab pane. */
+  .report-pane {
+    display: block !important;
+  }
 }
