@@ -434,42 +434,58 @@ function ReviewList({
   }
   return (
     <ul className="space-y-2">
-      {reviews.map((r) => (
-        <li key={r.id}>
-          <button
-            onClick={() => onSelect(r.id)}
-            className="flex w-full items-center gap-4 rounded-xl bg-slate-800/60 px-4 py-3 text-left transition-colors hover:bg-slate-800"
-          >
-            <ScoreBadge status={r.status} score={r.overallScore} />
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <span className="truncate font-medium">{r.client ?? r.filename}</span>
-                {showRep && r.rep && (
-                  <span className="shrink-0 rounded-full bg-sky-500/20 px-2 py-0.5 text-xs text-sky-300">
-                    {r.rep}
-                  </span>
-                )}
-                {r.status === "completed" &&
-                  (r.coachReviewed ? (
-                    <span className="shrink-0 rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs text-emerald-300">
-                      Coached ✓
+      {reviews.map((r) => {
+        // A rep viewing an unreleased completed call: no score is sent.
+        const pending = r.status === "completed" && r.overallScore == null && r.released === false;
+        return (
+          <li key={r.id}>
+            <button
+              onClick={() => onSelect(r.id)}
+              className="flex w-full items-center gap-4 rounded-xl bg-slate-800/60 px-4 py-3 text-left transition-colors hover:bg-slate-800"
+            >
+              {pending ? (
+                <Badge className="bg-slate-700 text-slate-400">🔒</Badge>
+              ) : (
+                <ScoreBadge status={r.status} score={r.overallScore} />
+              )}
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="truncate font-medium">{r.client ?? r.filename}</span>
+                  {showRep && r.rep && (
+                    <span className="shrink-0 rounded-full bg-sky-500/20 px-2 py-0.5 text-xs text-sky-300">
+                      {r.rep}
                     </span>
-                  ) : (
-                    <span className="shrink-0 rounded-full border border-amber-400/40 px-2 py-0.5 text-xs text-amber-300">
-                      Awaiting coach
-                    </span>
-                  ))}
+                  )}
+                  {r.status === "completed" &&
+                    (pending ? (
+                      <span className="shrink-0 rounded-full border border-slate-500/40 px-2 py-0.5 text-xs text-slate-400">
+                        Pending your coach
+                      </span>
+                    ) : r.coachReviewed ? (
+                      <span className="shrink-0 rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs text-emerald-300">
+                        Coached ✓
+                      </span>
+                    ) : (
+                      <span className="shrink-0 rounded-full border border-amber-400/40 px-2 py-0.5 text-xs text-amber-300">
+                        Awaiting coach
+                      </span>
+                    ))}
+                </div>
+                <div className="truncate text-sm text-slate-400">
+                  {r.status === "failed"
+                    ? r.error
+                    : pending
+                      ? "Your coach will go over this with you, then release it here."
+                      : (r.summary ?? STATUS_LABELS[r.status])}
+                </div>
               </div>
-              <div className="truncate text-sm text-slate-400">
-                {r.status === "failed" ? r.error : (r.summary ?? STATUS_LABELS[r.status])}
-              </div>
-            </div>
-            <span className="shrink-0 text-xs text-slate-500">
-              {new Date(r.createdAt).toLocaleString()}
-            </span>
-          </button>
-        </li>
-      ))}
+              <span className="shrink-0 text-xs text-slate-500">
+                {new Date(r.createdAt).toLocaleString()}
+              </span>
+            </button>
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -616,6 +632,7 @@ function CoachPanel({
   const [editing, setEditing] = useState(false);
   const [notes, setNotes] = useState(job.coach?.notes ?? "");
   const [reviewed, setReviewed] = useState(job.coach?.reviewed ?? false);
+  const [released, setReleased] = useState(job.coach?.released ?? false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -623,7 +640,7 @@ function CoachPanel({
     setSaving(true);
     setError(null);
     try {
-      const updated = await saveCoachFeedback(job.id, notes, reviewed);
+      const updated = await saveCoachFeedback(job.id, notes, reviewed, released);
       onUpdated(updated);
       setEditing(false);
     } catch (err) {
@@ -640,11 +657,22 @@ function CoachPanel({
 
   return (
     <section className="mb-8 rounded-2xl border border-sky-500/30 bg-sky-500/5 p-5">
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-2">
         <h2 className="text-lg font-semibold text-slate-100">Coach's notes</h2>
-        {saved?.reviewed && (
+        {saved?.released ? (
           <span className="rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-xs font-medium text-emerald-300">
-            Reviewed with rep ✓
+            Released to rep ✓
+          </span>
+        ) : (
+          canEdit && (
+            <span className="rounded-full border border-amber-400/40 px-2.5 py-0.5 text-xs text-amber-300">
+              Not released yet
+            </span>
+          )
+        )}
+        {saved?.reviewed && (
+          <span className="rounded-full bg-slate-700 px-2.5 py-0.5 text-xs text-slate-300">
+            Discussed with rep ✓
           </span>
         )}
         {canEdit && !editing && (
@@ -652,7 +680,7 @@ function CoachPanel({
             onClick={() => setEditing(true)}
             className="print-hide ml-auto rounded-lg border border-slate-600 px-3 py-1 text-sm text-slate-300 hover:bg-slate-800"
           >
-            {saved?.notes ? "Edit" : "Add notes"}
+            {saved?.notes || saved?.released ? "Edit" : "Add notes"}
           </button>
         )}
       </div>
@@ -674,7 +702,7 @@ function CoachPanel({
             placeholder="What this rep should keep doing, stop doing, and try on the next call…"
             className="w-full rounded-lg border border-slate-600 bg-slate-900 p-3 text-sm text-slate-100 placeholder:text-slate-500"
           />
-          <div className="flex flex-wrap items-center gap-4">
+          <div className="space-y-2">
             <label className="flex items-center gap-2 text-sm text-slate-300">
               <input
                 type="checkbox"
@@ -682,8 +710,25 @@ function CoachPanel({
                 onChange={(e) => setReviewed(e.target.checked)}
                 className="h-4 w-4"
               />
-              Reviewed with the salesperson
+              I've discussed this call with the salesperson (1:1 done)
             </label>
+            <label className="flex items-center gap-2 text-sm text-slate-300">
+              <input
+                type="checkbox"
+                checked={released}
+                onChange={(e) => setReleased(e.target.checked)}
+                className="h-4 w-4"
+              />
+              <span>
+                Release the report so the salesperson can see it
+                <span className="block text-xs text-slate-500">
+                  Until you tick this, the rep can't see their score or report — only that it's
+                  awaiting your review.
+                </span>
+              </span>
+            </label>
+          </div>
+          <div className="flex flex-wrap items-center gap-4">
             <div className="ml-auto flex gap-2">
               <button
                 onClick={() => setEditing(false)}
@@ -736,6 +781,8 @@ function DetailView({
           <p className="font-medium text-red-300">Review failed</p>
           <p className="mt-1 text-sm text-red-200/80">{job.error}</p>
         </div>
+      ) : job.status === "completed" && !job.result && !canCoach ? (
+        <PendingReleaseView client={job.client} />
       ) : job.status !== "completed" || !job.result ? (
         <ProgressView job={job} />
       ) : (
@@ -760,6 +807,21 @@ function DetailView({
           <Report result={job.result} reviewId={job.id} />
         </div>
       )}
+    </div>
+  );
+}
+
+function PendingReleaseView({ client }: { client?: string }) {
+  return (
+    <div className="rounded-2xl bg-slate-800/60 p-8 text-center">
+      <div className="text-4xl">🔒</div>
+      <h2 className="mt-3 text-lg font-semibold text-slate-100">
+        Your coach is reviewing this call{client ? ` with ${client}` : ""}
+      </h2>
+      <p className="mx-auto mt-2 max-w-md text-sm text-slate-400">
+        The AI review is done, but your sales head goes over it with you first. You'll see the full
+        report and feedback here right after your 1:1.
+      </p>
     </div>
   );
 }

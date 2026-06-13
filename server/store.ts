@@ -11,6 +11,8 @@ export interface CoachFeedback {
   notes: string;
   /** True once the coach has gone over the call with the rep. */
   reviewed: boolean;
+  /** True once the coach releases the report for the rep to see. */
+  released: boolean;
   updatedAt: string;
 }
 

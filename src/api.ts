@@ -19,6 +19,7 @@ export interface ScorecardScore {
 export interface CoachFeedback {
   notes: string;
   reviewed: boolean;
+  released: boolean;
   updatedAt: string;
 }
 
@@ -30,6 +31,7 @@ export interface ReviewSummary {
   rep?: string;
   client?: string;
   error?: string;
+  released?: boolean;
   coachReviewed?: boolean;
   hasCoachNotes?: boolean;
   overallScore?: number;
@@ -46,6 +48,7 @@ export interface ReviewJob {
   client?: string;
   audioFile?: string;
   coach?: CoachFeedback;
+  released?: boolean;
   error?: string;
   result?: CallReviewResult;
 }
@@ -54,11 +57,12 @@ export async function saveCoachFeedback(
   id: string,
   notes: string,
   reviewed: boolean,
+  released: boolean,
 ): Promise<ReviewJob> {
   const res = await api(`/api/reviews/${id}/coach`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ notes, reviewed }),
+    body: JSON.stringify({ notes, reviewed, released }),
   });
   return json<ReviewJob>(res);
 }

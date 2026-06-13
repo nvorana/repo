@@ -20,6 +20,7 @@ import {
   roleForPassword,
   roleFromRequest,
   setSessionCookie,
+  type Role,
 } from "./auth.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -102,6 +103,17 @@ app.get("/api/me", (req, res) => {
 // Everything below requires a logged-in role.
 app.use("/api", requireAuth);
 
+// The effective role of the requester (open mode acts as manager).
+function roleOf(req: express.Request): Role {
+  return authEnabled() ? (roleFromRequest(req) ?? "rep") : "manager";
+}
+
+// A report is hidden from reps until the sales head releases it — this is the
+// accountability gate: reps only see their report after the 1:1 feedback.
+function repCanSee(job: { status: string; coach?: { released?: boolean } }): boolean {
+  return job.status !== "completed" || Boolean(job.coach?.released);
+}
+
 app.get("/api/frameworks", (_req, res) => {
   const frameworks = loadFrameworks();
   const defaultId = pickDefaultFrameworkId(frameworks);
@@ -115,28 +127,32 @@ app.get("/api/frameworks", (_req, res) => {
   );
 });
 
-app.get("/api/reviews", (_req, res) => {
+app.get("/api/reviews", (req, res) => {
+  const asRep = roleOf(req) === "rep";
   // List view stays light: omit transcripts and report bodies, but include
-  // per-criterion scores so the UI can aggregate rep performance.
+  // per-criterion scores so the UI can aggregate rep performance. Scores are
+  // withheld from reps on calls the coach hasn't released yet.
   res.json(
-    store.list().map(({ id, filename, createdAt, status, rep, client, error, result, coach }) => ({
-      id,
-      filename,
-      createdAt,
-      status,
-      rep,
-      client,
-      error,
-      coachReviewed: coach?.reviewed ?? false,
-      hasCoachNotes: Boolean(coach?.notes),
-      overallScore: result?.review.overallScore,
-      summary: result?.review.summary,
-      scorecard: result?.review.scorecard.map(({ criterionId, criterionName, score }) => ({
-        criterionId,
-        criterionName,
-        score,
-      })),
-    })),
+    store.list().map((job) => {
+      const { id, filename, createdAt, status, rep, client, error, result, coach } = job;
+      const released = Boolean(coach?.released);
+      const base = { id, filename, createdAt, status, rep, client, error, released };
+      if (asRep && !repCanSee(job)) {
+        return { ...base, coachReviewed: coach?.reviewed ?? false };
+      }
+      return {
+        ...base,
+        coachReviewed: coach?.reviewed ?? false,
+        hasCoachNotes: Boolean(coach?.notes),
+        overallScore: result?.review.overallScore,
+        summary: result?.review.summary,
+        scorecard: result?.review.scorecard.map(({ criterionId, criterionName, score }) => ({
+          criterionId,
+          criterionName,
+          score,
+        })),
+      };
+    }),
   );
 });
 
@@ -145,24 +161,36 @@ app.post("/api/reviews/:id/coach", requireManager, (req, res) => {
   if (!job) return res.status(404).json({ error: "Review not found" });
   const notes = typeof req.body.notes === "string" ? req.body.notes.slice(0, 10_000) : "";
   const reviewed = Boolean(req.body.reviewed);
+  const released = Boolean(req.body.released);
   const updated = store.update(job.id, {
-    coach: { notes, reviewed, updatedAt: new Date().toISOString() },
+    coach: { notes, reviewed, released, updatedAt: new Date().toISOString() },
   });
   res.json(updated);
 });
 
 app.get("/api/reviews/:id/audio", (req, res) => {
-  const job = store.get(req.params.id);
+  const job = store.get(String(req.params.id));
   if (!job?.audioFile) return res.status(404).json({ error: "No audio stored for this review" });
+  if (roleOf(req) === "rep" && !repCanSee(job)) {
+    return res.status(403).json({ error: "Your coach hasn't released this call yet." });
+  }
   const file = path.join(AUDIO_DIR, path.basename(job.audioFile));
   if (!fs.existsSync(file)) return res.status(404).json({ error: "Audio file missing" });
   res.sendFile(file);
 });
 
 app.get("/api/reviews/:id", (req, res) => {
-  const job = store.get(req.params.id);
+  const job = store.get(String(req.params.id));
   if (!job) return res.status(404).json({ error: "Review not found" });
-  res.json(job);
+  const released = Boolean(job.coach?.released);
+  if (roleOf(req) === "rep" && !repCanSee(job)) {
+    // Hide the report body and coach notes until released.
+    const { result: _r, coach: _c, ...rest } = job;
+    void _r;
+    void _c;
+    return res.json({ ...rest, released });
+  }
+  res.json({ ...job, released });
 });
 
 app.post("/api/reviews", upload.single("audio"), (req, res) => {
