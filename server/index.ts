@@ -143,8 +143,14 @@ app.post("/api/users", requireManager, (req, res) => {
   const name = typeof req.body.name === "string" ? req.body.name : "";
   const password = typeof req.body.password === "string" ? req.body.password : "";
   const role: Role = req.body.role === "manager" ? "manager" : "rep";
+  const wasOpen = !authEnabled(); // before this create
   try {
-    res.status(201).json(toPublic(users.create({ name, role, password })));
+    const user = users.create({ name, role, password });
+    // If the very first account is created from open mode, log the creator in
+    // as it (when it's a manager) so they don't lock themselves out the instant
+    // auth turns on.
+    if (wasOpen && user.role === "manager") setSessionCookie(req, res, user.id);
+    res.status(201).json(toPublic(user));
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : "Could not create user" });
   }
