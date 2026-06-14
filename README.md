@@ -1,4 +1,4 @@
-# CallCoach — AI Sales Call Review
+# SalesCallOS — AI Sales Call Review
 
 Upload a one-on-one sales call recording and get back a structured coaching
 review: what went right, what went wrong, **every objection** (explicit and

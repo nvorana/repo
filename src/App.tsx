@@ -104,7 +104,7 @@ export default function App() {
               onClick={() => setSelectedId(null)}
               className="text-xl font-bold tracking-tight"
             >
-              Call<span className="text-primary">Coach</span>
+              SalesCall<span className="text-primary">OS</span>
             </button>
             {isManager && !selectedId && (
               <div role="tablist" className="tabs tabs-box ml-6 hidden sm:flex">
@@ -213,7 +213,7 @@ function LoginScreen({ onLogin }: { onLogin: (role: Role) => void }) {
       <div className="card w-full max-w-sm bg-base-200 shadow-xl">
         <form onSubmit={submit} className="card-body">
           <h1 className="text-center text-2xl font-bold">
-            Call<span className="text-primary">Coach</span>
+            SalesCall<span className="text-primary">OS</span>
           </h1>
           <p className="mb-2 text-center text-sm opacity-60">
             Enter your team password to continue.
