@@ -1,0 +1,122 @@
+import fs from "node:fs";
+import path from "node:path";
+import crypto from "node:crypto";
+
+export type Role = "rep" | "manager";
+
+export interface User {
+  id: string;
+  name: string;
+  role: Role;
+  salt: string;
+  hash: string;
+  createdAt: string;
+}
+
+/** User as exposed to the client — never includes the password material. */
+export interface PublicUser {
+  id: string;
+  name: string;
+  role: Role;
+  createdAt: string;
+}
+
+function hashPassword(password: string, salt: string): string {
+  return crypto.scryptSync(password, salt, 64).toString("hex");
+}
+
+export function toPublic(u: User): PublicUser {
+  return { id: u.id, name: u.name, role: u.role, createdAt: u.createdAt };
+}
+
+/**
+ * Individual accounts (name + password + role), one JSON file. Passwords are
+ * scrypt-hashed with a per-user salt — plaintext is never stored.
+ */
+export class UserStore {
+  private readonly file: string;
+  private users: User[] = [];
+
+  constructor(file: string) {
+    this.file = file;
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    if (fs.existsSync(file)) {
+      this.users = JSON.parse(fs.readFileSync(file, "utf8")) as User[];
+    }
+  }
+
+  private save() {
+    fs.writeFileSync(this.file, JSON.stringify(this.users, null, 2));
+  }
+
+  count(): number {
+    return this.users.length;
+  }
+
+  hasManager(): boolean {
+    return this.users.some((u) => u.role === "manager");
+  }
+
+  list(): PublicUser[] {
+    return [...this.users]
+      .sort((a, b) => a.role.localeCompare(b.role) || a.name.localeCompare(b.name))
+      .map(toPublic);
+  }
+
+  getById(id: string): User | null {
+    return this.users.find((u) => u.id === id) ?? null;
+  }
+
+  getByName(name: string): User | null {
+    const key = name.trim().toLowerCase();
+    return this.users.find((u) => u.name.toLowerCase() === key) ?? null;
+  }
+
+  verify(name: string, password: string): User | null {
+    const u = this.getByName(name);
+    if (!u) return null;
+    const candidate = hashPassword(password, u.salt);
+    const a = Buffer.from(candidate, "hex");
+    const b = Buffer.from(u.hash, "hex");
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+    return u;
+  }
+
+  create(input: { name: string; role: Role; password: string }): User {
+    const name = input.name.trim();
+    if (!name) throw new Error("Name is required");
+    if (input.password.length < 4) throw new Error("Password must be at least 4 characters");
+    if (this.getByName(name)) throw new Error(`Someone named "${name}" already exists`);
+    const salt = crypto.randomBytes(16).toString("hex");
+    const user: User = {
+      id: crypto.randomUUID(),
+      name,
+      role: input.role,
+      salt,
+      hash: hashPassword(input.password, salt),
+      createdAt: new Date().toISOString(),
+    };
+    this.users.push(user);
+    this.save();
+    return user;
+  }
+
+  setPassword(id: string, password: string): void {
+    const u = this.getById(id);
+    if (!u) throw new Error("User not found");
+    if (password.length < 4) throw new Error("Password must be at least 4 characters");
+    u.salt = crypto.randomBytes(16).toString("hex");
+    u.hash = hashPassword(password, u.salt);
+    this.save();
+  }
+
+  remove(id: string): void {
+    const u = this.getById(id);
+    if (!u) return;
+    if (u.role === "manager" && this.users.filter((x) => x.role === "manager").length <= 1) {
+      throw new Error("Can't remove the last manager account");
+    }
+    this.users = this.users.filter((x) => x.id !== id);
+    this.save();
+  }
+}

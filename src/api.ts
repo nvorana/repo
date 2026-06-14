@@ -87,25 +87,64 @@ function api(path: string, init: RequestInit = {}): Promise<Response> {
 // --- Auth -------------------------------------------------------------------
 export type Role = "rep" | "manager";
 
-/** Returns the logged-in role, or null if not logged in / auth disabled-but-open. */
-export async function getSession(): Promise<Role | null> {
-  const res = await api("/api/me");
-  if (res.status === 401) return null;
-  const body = await json<{ role: Role }>(res);
-  return body.role;
+export interface Session {
+  name: string;
+  role: Role;
 }
 
-export async function login(password: string): Promise<Role> {
+/** Returns the logged-in session, or null if not logged in. */
+export async function getSession(): Promise<Session | null> {
+  const res = await api("/api/me");
+  if (res.status === 401) return null;
+  return json<Session>(res);
+}
+
+export async function login(name: string, password: string): Promise<Session> {
   const res = await api("/api/login", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ password }),
+    body: JSON.stringify({ name, password }),
   });
-  return (await json<{ role: Role }>(res)).role;
+  return json<Session>(res);
 }
 
 export async function logout(): Promise<void> {
   await api("/api/logout", { method: "POST" });
+}
+
+// --- Users (manager only) ---------------------------------------------------
+export interface AppUser {
+  id: string;
+  name: string;
+  role: Role;
+  createdAt: string;
+}
+
+export function listUsers(): Promise<AppUser[]> {
+  return api("/api/users").then((r) => json<AppUser[]>(r));
+}
+
+export async function createUser(name: string, role: Role, password: string): Promise<AppUser> {
+  const res = await api("/api/users", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name, role, password }),
+  });
+  return json<AppUser>(res);
+}
+
+export async function resetUserPassword(id: string, password: string): Promise<void> {
+  const res = await api(`/api/users/${id}/password`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ password }),
+  });
+  await json(res);
+}
+
+export async function deleteUser(id: string): Promise<void> {
+  const res = await api(`/api/users/${id}`, { method: "DELETE" });
+  await json(res);
 }
 
 export function listReviews(): Promise<ReviewSummary[]> {

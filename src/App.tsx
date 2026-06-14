@@ -10,18 +10,18 @@ import {
   STATUS_LABELS,
   type ReviewJob,
   type ReviewSummary,
-  type Role,
+  type Session,
 } from "./api.ts";
 import { UploadCard } from "./components/UploadCard.tsx";
 import { Report } from "./components/Report.tsx";
+import { UsersAdmin } from "./components/UsersAdmin.tsx";
 
 const POLL_MS = 4000;
-const NAME_KEY = "callcoach.rep";
+type ManagerTab = "team" | "mine" | "people";
 
 export default function App() {
-  const [role, setRole] = useState<Role | null | undefined>(undefined);
-  const [tab, setTab] = useState<"team" | "mine">("team");
-  const [myName, setMyName] = useState<string>(() => localStorage.getItem(NAME_KEY) ?? "");
+  const [session, setSession] = useState<Session | null | undefined>(undefined);
+  const [tab, setTab] = useState<ManagerTab>("team");
 
   const [reviews, setReviews] = useState<ReviewSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -29,8 +29,8 @@ export default function App() {
 
   useEffect(() => {
     getSession()
-      .then(setRole)
-      .catch(() => setRole(null));
+      .then(setSession)
+      .catch(() => setSession(null));
   }, []);
 
   const refreshList = useCallback(() => {
@@ -38,8 +38,8 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (role) refreshList();
-  }, [role, refreshList]);
+    if (session) refreshList();
+  }, [session, refreshList]);
 
   useEffect(() => {
     if (!reviews.some((r) => isInProgress(r.status))) return;
@@ -68,19 +68,14 @@ export default function App() {
     };
   }, [selectedId]);
 
-  function chooseName(name: string) {
-    localStorage.setItem(NAME_KEY, name);
-    setMyName(name);
-  }
-
   async function handleLogout() {
     await logout();
-    setRole(null);
+    setSession(null);
     setSelectedId(null);
     setReviews([]);
   }
 
-  if (role === undefined) {
+  if (session === undefined) {
     return (
       <div className="flex min-h-full items-center justify-center bg-base-100">
         <span className="loading loading-spinner loading-lg text-primary" />
@@ -88,44 +83,44 @@ export default function App() {
     );
   }
 
-  if (role === null) {
-    return <LoginScreen onLogin={setRole} />;
+  if (session === null) {
+    return <LoginScreen onLogin={setSession} />;
   }
 
-  const isManager = role === "manager";
+  const isManager = session.role === "manager";
   const showingMine = !isManager || tab === "mine";
+
+  const managerTabs: { id: ManagerTab; label: string; short: string }[] = [
+    { id: "team", label: "Team Coaching", short: "Team" },
+    { id: "mine", label: "My Coaching", short: "Mine" },
+    { id: "people", label: "People", short: "People" },
+  ];
 
   return (
     <div className="min-h-full bg-base-100 text-base-content">
       <header className="print-hide border-b border-base-300 bg-base-200/40">
         <div className="navbar mx-auto max-w-5xl px-6">
-          <div className="flex-1">
-            <button
-              onClick={() => setSelectedId(null)}
-              className="text-xl font-bold tracking-tight"
-            >
+          <div className="flex-1 items-center">
+            <button onClick={() => setSelectedId(null)} className="text-xl font-bold tracking-tight">
               SalesCall<span className="text-primary">OS</span>
             </button>
             {isManager && !selectedId && (
               <div role="tablist" className="tabs tabs-box ml-6 hidden sm:flex">
-                <button
-                  role="tab"
-                  className={`tab ${tab === "team" ? "tab-active" : ""}`}
-                  onClick={() => setTab("team")}
-                >
-                  Team Coaching
-                </button>
-                <button
-                  role="tab"
-                  className={`tab ${tab === "mine" ? "tab-active" : ""}`}
-                  onClick={() => setTab("mine")}
-                >
-                  My Coaching
-                </button>
+                {managerTabs.map((t) => (
+                  <button
+                    key={t.id}
+                    role="tab"
+                    className={`tab ${tab === t.id ? "tab-active" : ""}`}
+                    onClick={() => setTab(t.id)}
+                  >
+                    {t.label}
+                  </button>
+                ))}
               </div>
             )}
           </div>
           <div className="flex items-center gap-3">
+            <span className="hidden text-sm opacity-70 sm:inline">{session.name}</span>
             <span className="badge badge-ghost badge-sm">
               {isManager ? "Sales head" : "Salesperson"}
             </span>
@@ -136,20 +131,16 @@ export default function App() {
         </div>
         {isManager && !selectedId && (
           <div role="tablist" className="tabs tabs-box mx-auto mb-2 max-w-5xl px-6 sm:hidden">
-            <button
-              role="tab"
-              className={`tab flex-1 ${tab === "team" ? "tab-active" : ""}`}
-              onClick={() => setTab("team")}
-            >
-              Team
-            </button>
-            <button
-              role="tab"
-              className={`tab flex-1 ${tab === "mine" ? "tab-active" : ""}`}
-              onClick={() => setTab("mine")}
-            >
-              My Coaching
-            </button>
+            {managerTabs.map((t) => (
+              <button
+                key={t.id}
+                role="tab"
+                className={`tab flex-1 ${tab === t.id ? "tab-active" : ""}`}
+                onClick={() => setTab(t.id)}
+              >
+                {t.short}
+              </button>
+            ))}
           </div>
         )}
       </header>
@@ -165,21 +156,18 @@ export default function App() {
               refreshList();
             }}
           />
+        ) : isManager && tab === "people" ? (
+          <UsersAdmin />
         ) : showingMine ? (
-          myName ? (
-            <RepHome
-              reviews={reviews}
-              myName={myName}
-              onChangeName={() => chooseName("")}
-              onUploaded={(id) => {
-                refreshList();
-                setSelectedId(id);
-              }}
-              onSelect={setSelectedId}
-            />
-          ) : (
-            <NameGate reviews={reviews} onChoose={chooseName} />
-          )
+          <RepHome
+            reviews={reviews}
+            myName={session.name}
+            onUploaded={(id) => {
+              refreshList();
+              setSelectedId(id);
+            }}
+            onSelect={setSelectedId}
+          />
         ) : (
           <ManagerHome reviews={reviews} onSelect={setSelectedId} />
         )}
@@ -190,7 +178,8 @@ export default function App() {
 
 // --- Login ------------------------------------------------------------------
 
-function LoginScreen({ onLogin }: { onLogin: (role: Role) => void }) {
+function LoginScreen({ onLogin }: { onLogin: (s: Session) => void }) {
+  const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -200,7 +189,7 @@ function LoginScreen({ onLogin }: { onLogin: (role: Role) => void }) {
     setBusy(true);
     setError(null);
     try {
-      onLogin(await login(password));
+      onLogin(await login(name, password));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {
@@ -215,12 +204,17 @@ function LoginScreen({ onLogin }: { onLogin: (role: Role) => void }) {
           <h1 className="text-center text-2xl font-bold">
             SalesCall<span className="text-primary">OS</span>
           </h1>
-          <p className="mb-2 text-center text-sm opacity-60">
-            Enter your team password to continue.
-          </p>
+          <p className="mb-2 text-center text-sm opacity-60">Log in to continue.</p>
+          <input
+            type="text"
+            autoFocus
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Your name"
+            className="input input-bordered w-full"
+          />
           <input
             type="password"
-            autoFocus
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="Password"
@@ -233,7 +227,7 @@ function LoginScreen({ onLogin }: { onLogin: (role: Role) => void }) {
           )}
           <button
             type="submit"
-            disabled={busy || !password}
+            disabled={busy || !name || !password}
             className="btn btn-primary mt-2 w-full"
           >
             {busy ? <span className="loading loading-spinner loading-sm" /> : "Log in"}
@@ -244,65 +238,16 @@ function LoginScreen({ onLogin }: { onLogin: (role: Role) => void }) {
   );
 }
 
-// --- Name gate --------------------------------------------------------------
-
-function NameGate({
-  reviews,
-  onChoose,
-}: {
-  reviews: ReviewSummary[];
-  onChoose: (name: string) => void;
-}) {
-  const [name, setName] = useState("");
-  const known = [...new Set(reviews.map((r) => r.rep).filter((r): r is string => Boolean(r)))].sort();
-  return (
-    <div className="mx-auto max-w-md">
-      <h1 className="mb-1 text-2xl font-bold">Who are you?</h1>
-      <p className="mb-5 opacity-60">
-        Pick your name so your calls and coaching show up here. This is remembered on this device.
-      </p>
-      {known.length > 0 && (
-        <div className="mb-4 flex flex-wrap gap-2">
-          {known.map((n) => (
-            <button key={n} onClick={() => onChoose(n)} className="btn btn-outline btn-sm">
-              {n}
-            </button>
-          ))}
-        </div>
-      )}
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (name.trim()) onChoose(name.trim());
-        }}
-        className="join w-full"
-      >
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Type your name"
-          className="input input-bordered join-item flex-1"
-        />
-        <button type="submit" disabled={!name.trim()} className="btn btn-primary join-item">
-          Continue
-        </button>
-      </form>
-    </div>
-  );
-}
-
 // --- Rep hero: "My Coaching" ------------------------------------------------
 
 function RepHome({
   reviews,
   myName,
-  onChangeName,
   onUploaded,
   onSelect,
 }: {
   reviews: ReviewSummary[];
   myName: string;
-  onChangeName: () => void;
   onUploaded: (id: string) => void;
   onSelect: (id: string) => void;
 }) {
@@ -312,12 +257,7 @@ function RepHome({
   return (
     <div className="space-y-10">
       <section>
-        <div className="mb-1 flex items-center gap-3">
-          <h1 className="text-2xl font-bold">Hi {myName} 👋</h1>
-          <button onClick={onChangeName} className="link link-hover text-xs opacity-60">
-            (not you?)
-          </button>
-        </div>
+        <h1 className="mb-1 text-2xl font-bold">Hi {myName} 👋</h1>
         <p className="opacity-60">Your coaching dashboard — upload a call and see how you did.</p>
       </section>
 
@@ -802,28 +742,99 @@ function PendingReleaseView({ client }: { client?: string }) {
   );
 }
 
-const STAGES = ["queued", "transcribing", "identifying_speakers", "analyzing"] as const;
+const STAGES = [
+  { id: "queued", icon: "📥", label: "Queued", blurb: "Your call is in line." },
+  { id: "transcribing", icon: "✍️", label: "Transcribing audio", blurb: "Turning speech into text, word by word." },
+  { id: "identifying_speakers", icon: "🗣️", label: "Identifying speakers", blurb: "Working out who's the rep and who's the prospect." },
+  { id: "analyzing", icon: "🧠", label: "Reviewing the call", blurb: "Scoring it against your sales framework." },
+] as const;
+
+const STAGE_PROGRESS: Record<string, number> = {
+  queued: 8,
+  transcribing: 40,
+  identifying_speakers: 65,
+  analyzing: 88,
+};
+
+const TIPS = [
+  "Top reps aim to talk about 40% of the time — let the prospect do the talking.",
+  "Silence after stating the price is a power move. Don't fill it.",
+  "The real objection is usually the one they didn't say out loud.",
+  "Discovery before pitch: find the pain, quantify it, then prescribe.",
+  "End every call with a specific, time-bound next step.",
+  "One level deeper: when they answer, ask 'what do you mean by that?'",
+];
 
 function ProgressView({ job }: { job: ReviewJob }) {
-  const current = STAGES.indexOf(job.status as (typeof STAGES)[number]);
+  const current = STAGES.findIndex((s) => s.id === job.status);
+  const pct = STAGE_PROGRESS[job.status] ?? 5;
+  const [tip, setTip] = useState(0);
+
+  useEffect(() => {
+    const t = setInterval(() => setTip((i) => (i + 1) % TIPS.length), 4000);
+    return () => clearInterval(t);
+  }, []);
+
   return (
-    <div className="card bg-base-200">
-      <div className="card-body">
-        <div className="mb-4 flex items-center gap-3">
-          <span className="loading loading-spinner text-primary" />
-          <span className="font-medium">{STATUS_LABELS[job.status]}</span>
+    <div className="mx-auto max-w-xl">
+      <div className="card bg-base-200 shadow-sm">
+        <div className="card-body items-center gap-5 py-10 text-center">
+          <div className="relative flex h-20 w-20 items-center justify-center">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/20" />
+            <span className="relative flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 text-3xl">
+              {STAGES[Math.max(0, current)].icon}
+            </span>
+          </div>
+
+          <div>
+            <h2 className="text-xl font-bold">{STATUS_LABELS[job.status]}</h2>
+            <p className="mt-1 text-sm opacity-60">
+              {STAGES[Math.max(0, current)].blurb}
+            </p>
+          </div>
+
+          <div className="w-full">
+            <progress className="progress progress-primary w-full transition-all" value={pct} max={100} />
+            <div className="mt-4 grid grid-cols-4 gap-2">
+              {STAGES.map((s, i) => {
+                const done = i < current;
+                const active = i === current;
+                return (
+                  <div key={s.id} className="flex flex-col items-center gap-1">
+                    <span
+                      className={`flex h-9 w-9 items-center justify-center rounded-full text-sm transition-colors ${
+                        done
+                          ? "bg-success text-success-content"
+                          : active
+                            ? "bg-primary text-primary-content animate-pulse"
+                            : "bg-base-300 opacity-50"
+                      }`}
+                    >
+                      {done ? "✓" : i + 1}
+                    </span>
+                    <span className={`text-[10px] leading-tight ${active ? "font-semibold" : "opacity-50"}`}>
+                      {s.label}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="mt-2 w-full rounded-box bg-base-100 p-4 text-sm">
+            <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-primary">
+              💡 While you wait
+            </div>
+            <p key={tip} className="animate-[fadeIn_0.5s_ease] opacity-90">
+              {TIPS[tip]}
+            </p>
+          </div>
+
+          <p className="text-xs opacity-50">
+            Long calls take a few minutes — this runs in the background, so you can leave and come
+            back.
+          </p>
         </div>
-        <ul className="steps steps-vertical">
-          {STAGES.map((stage, i) => (
-            <li key={stage} className={`step ${i <= current ? "step-primary" : ""}`}>
-              {STATUS_LABELS[stage]}
-            </li>
-          ))}
-        </ul>
-        <p className="mt-4 text-sm opacity-50">
-          Long calls can take a few minutes — transcription and review run in the background, you can
-          leave this page and come back.
-        </p>
       </div>
     </div>
   );

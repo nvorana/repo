@@ -12,21 +12,18 @@ import {
   type SalesFramework,
 } from "../core/index.ts";
 import { ReviewStore } from "./store.ts";
+import { UserStore, toPublic, type Role, type User } from "./users.ts";
 import {
-  authEnabled,
   clearSessionCookie,
-  requireAuth,
-  requireManager,
-  roleForPassword,
-  roleFromRequest,
   setSessionCookie,
-  type Role,
+  userIdFromRequest,
 } from "./auth.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT ?? 8787);
 const DATA_DIR = process.env.DATA_DIR ?? path.join(__dirname, "..", "data", "reviews");
 const AUDIO_DIR = process.env.AUDIO_DIR ?? path.join(__dirname, "..", "data", "audio");
+const USERS_FILE = process.env.USERS_FILE ?? path.join(DATA_DIR, "..", "users.json");
 const FRAMEWORKS_DIR = path.join(__dirname, "frameworks");
 const MAX_UPLOAD_MB = 250;
 
@@ -61,6 +58,16 @@ function pickDefaultFrameworkId(frameworks: Map<string, SalesFramework>): string
 // --- App -------------------------------------------------------------------
 
 const store = new ReviewStore(DATA_DIR);
+const users = new UserStore(USERS_FILE);
+
+// Seed the first manager account from env on first boot, so the owner always
+// has a way in. After that, the manager creates rep accounts in the app.
+if (process.env.MANAGER_PASSWORD && !users.hasManager()) {
+  const name = (process.env.MANAGER_NAME ?? "Manager").trim() || "Manager";
+  users.create({ name, role: "manager", password: process.env.MANAGER_PASSWORD });
+  console.log(`Seeded manager account "${name}" — log in with that name and MANAGER_PASSWORD.`);
+}
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: MAX_UPLOAD_MB * 1024 * 1024 },
@@ -69,6 +76,21 @@ const upload = multer({
 const app = express();
 app.set("trust proxy", 1); // behind Railway/Render's HTTPS proxy
 app.use(express.json());
+
+// Auth is active whenever any account exists. With none (fresh dev box) the
+// app runs open and treats the caller as a manager.
+function authEnabled(): boolean {
+  return users.count() > 0;
+}
+
+function currentUser(req: express.Request): User | null {
+  const id = userIdFromRequest(req);
+  return id ? users.getById(id) : null;
+}
+
+function roleOf(req: express.Request): Role {
+  return currentUser(req)?.role ?? (authEnabled() ? "rep" : "manager");
+}
 
 app.get("/api/health", (_req, res) => {
   res.json({
@@ -79,12 +101,14 @@ app.get("/api/health", (_req, res) => {
   });
 });
 
-// --- Auth: two shared role passwords (rep / manager) ------------------------
+// --- Auth: individual accounts (name + password) ----------------------------
 app.post("/api/login", (req, res) => {
-  const role = roleForPassword(typeof req.body.password === "string" ? req.body.password : "");
-  if (!role) return res.status(401).json({ error: "Wrong password" });
-  setSessionCookie(req, res, role);
-  res.json({ role });
+  const name = typeof req.body.name === "string" ? req.body.name : "";
+  const password = typeof req.body.password === "string" ? req.body.password : "";
+  const user = users.verify(name, password);
+  if (!user) return res.status(401).json({ error: "Wrong name or password" });
+  setSessionCookie(req, res, user.id);
+  res.json({ name: user.name, role: user.role });
 });
 
 app.post("/api/logout", (_req, res) => {
@@ -92,26 +116,68 @@ app.post("/api/logout", (_req, res) => {
   res.json({ ok: true });
 });
 
-// Who am I? Drives which hero page the app shows.
 app.get("/api/me", (req, res) => {
-  if (!authEnabled()) return res.json({ role: "manager", authDisabled: true });
-  const role = roleFromRequest(req);
-  if (!role) return res.status(401).json({ error: "Not logged in" });
-  res.json({ role });
+  if (!authEnabled()) return res.json({ name: "Admin", role: "manager", authDisabled: true });
+  const user = currentUser(req);
+  if (!user) return res.status(401).json({ error: "Not logged in" });
+  res.json({ name: user.name, role: user.role });
 });
 
-// Everything below requires a logged-in role.
-app.use("/api", requireAuth);
+// Everything below requires a logged-in user (open when no accounts exist).
+app.use("/api", (req, res, next) => {
+  if (!authEnabled() || currentUser(req)) return next();
+  res.status(401).json({ error: "Not logged in" });
+});
 
-// The effective role of the requester (open mode acts as manager).
-function roleOf(req: express.Request): Role {
-  return authEnabled() ? (roleFromRequest(req) ?? "rep") : "manager";
+function requireManager(req: express.Request, res: express.Response, next: express.NextFunction) {
+  if (!authEnabled() || currentUser(req)?.role === "manager") return next();
+  res.status(403).json({ error: "Only the sales head can do this" });
 }
+
+// --- User administration (manager only) -------------------------------------
+app.get("/api/users", requireManager, (_req, res) => {
+  res.json(users.list());
+});
+
+app.post("/api/users", requireManager, (req, res) => {
+  const name = typeof req.body.name === "string" ? req.body.name : "";
+  const password = typeof req.body.password === "string" ? req.body.password : "";
+  const role: Role = req.body.role === "manager" ? "manager" : "rep";
+  try {
+    res.status(201).json(toPublic(users.create({ name, role, password })));
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "Could not create user" });
+  }
+});
+
+app.post("/api/users/:id/password", requireManager, (req, res) => {
+  const password = typeof req.body.password === "string" ? req.body.password : "";
+  try {
+    users.setPassword(String(req.params.id), password);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "Could not set password" });
+  }
+});
+
+app.delete("/api/users/:id", requireManager, (req, res) => {
+  try {
+    users.remove(String(req.params.id));
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "Could not remove user" });
+  }
+});
 
 // A report is hidden from reps until the sales head releases it — this is the
 // accountability gate: reps only see their report after the 1:1 feedback.
-function repCanSee(job: { status: string; coach?: { released?: boolean } }): boolean {
+function repReleased(job: { status: string; coach?: { released?: boolean } }): boolean {
   return job.status !== "completed" || Boolean(job.coach?.released);
+}
+
+// Reps can only ever touch their own calls (server-enforced, by account name).
+function repOwns(job: { rep?: string }, user: User | null): boolean {
+  return Boolean(user && job.rep && job.rep.toLowerCase() === user.name.toLowerCase());
 }
 
 app.get("/api/frameworks", (_req, res) => {
@@ -128,16 +194,19 @@ app.get("/api/frameworks", (_req, res) => {
 });
 
 app.get("/api/reviews", (req, res) => {
+  const user = currentUser(req);
   const asRep = roleOf(req) === "rep";
+  // Reps see only their own calls; the manager sees everyone.
+  const visible = asRep ? store.list().filter((job) => repOwns(job, user)) : store.list();
   // List view stays light: omit transcripts and report bodies, but include
   // per-criterion scores so the UI can aggregate rep performance. Scores are
-  // withheld from reps on calls the coach hasn't released yet.
+  // withheld from reps on their own calls the coach hasn't released yet.
   res.json(
-    store.list().map((job) => {
+    visible.map((job) => {
       const { id, filename, createdAt, status, rep, client, error, result, coach } = job;
       const released = Boolean(coach?.released);
       const base = { id, filename, createdAt, status, rep, client, error, released };
-      if (asRep && !repCanSee(job)) {
+      if (asRep && !repReleased(job)) {
         return { ...base, coachReviewed: coach?.reviewed ?? false };
       }
       return {
@@ -171,8 +240,12 @@ app.post("/api/reviews/:id/coach", requireManager, (req, res) => {
 app.get("/api/reviews/:id/audio", (req, res) => {
   const job = store.get(String(req.params.id));
   if (!job?.audioFile) return res.status(404).json({ error: "No audio stored for this review" });
-  if (roleOf(req) === "rep" && !repCanSee(job)) {
-    return res.status(403).json({ error: "Your coach hasn't released this call yet." });
+  const user = currentUser(req);
+  if (roleOf(req) === "rep") {
+    if (!repOwns(job, user)) return res.status(404).json({ error: "Review not found" });
+    if (!repReleased(job)) {
+      return res.status(403).json({ error: "Your coach hasn't released this call yet." });
+    }
   }
   const file = path.join(AUDIO_DIR, path.basename(job.audioFile));
   if (!fs.existsSync(file)) return res.status(404).json({ error: "Audio file missing" });
@@ -183,12 +256,16 @@ app.get("/api/reviews/:id", (req, res) => {
   const job = store.get(String(req.params.id));
   if (!job) return res.status(404).json({ error: "Review not found" });
   const released = Boolean(job.coach?.released);
-  if (roleOf(req) === "rep" && !repCanSee(job)) {
-    // Hide the report body and coach notes until released.
-    const { result: _r, coach: _c, ...rest } = job;
-    void _r;
-    void _c;
-    return res.json({ ...rest, released });
+  if (roleOf(req) === "rep") {
+    const user = currentUser(req);
+    if (!repOwns(job, user)) return res.status(404).json({ error: "Review not found" });
+    if (!repReleased(job)) {
+      // Hide the report body and coach notes until released.
+      const { result: _r, coach: _c, ...rest } = job;
+      void _r;
+      void _c;
+      return res.json({ ...rest, released });
+    }
   }
   res.json({ ...job, released });
 });
@@ -211,12 +288,19 @@ app.post("/api/reviews", upload.single("audio"), (req, res) => {
     return res.status(400).json({ error: `Unknown framework: ${frameworkId}` });
   }
 
-  const rep = typeof req.body.rep === "string" ? req.body.rep.trim().slice(0, 80) : "";
+  // The salesperson is the logged-in account (server-trusted). A manager may
+  // upload on behalf of a rep by passing a name; otherwise it's their own.
+  const me = currentUser(req);
+  const bodyRep = typeof req.body.rep === "string" ? req.body.rep.trim().slice(0, 80) : "";
+  let rep: string | undefined;
+  if (me?.role === "rep") rep = me.name;
+  else rep = bodyRep || me?.name || undefined;
+
   const client = typeof req.body.client === "string" ? req.body.client.trim().slice(0, 120) : "";
   if (!client) {
     return res.status(400).json({ error: "Client name is required." });
   }
-  const job = store.create(req.file.originalname, rep || undefined, client);
+  const job = store.create(req.file.originalname, rep, client);
 
   // Keep the recording so coaches can replay moments from the report.
   try {
