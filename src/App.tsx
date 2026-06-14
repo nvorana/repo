@@ -33,6 +33,17 @@ export default function App() {
       .catch(() => setSession(null));
   }, []);
 
+  // Re-verify the session when the page is restored from the browser's
+  // back/forward cache, so logging out can't be "undone" with the Back button.
+  useEffect(() => {
+    const recheck = () => getSession().then(setSession).catch(() => setSession(null));
+    const onShow = (e: PageTransitionEvent) => {
+      if (e.persisted) void recheck();
+    };
+    window.addEventListener("pageshow", onShow);
+    return () => window.removeEventListener("pageshow", onShow);
+  }, []);
+
   const refreshList = useCallback(() => {
     listReviews().then(setReviews).catch(console.error);
   }, []);
