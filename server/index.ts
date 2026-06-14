@@ -60,9 +60,14 @@ function pickDefaultFrameworkId(frameworks: Map<string, SalesFramework>): string
 const store = new ReviewStore(DATA_DIR);
 const users = new UserStore(USERS_FILE);
 
-// Seed the first manager account from env on first boot, so the owner always
-// has a way in. After that, the manager creates accounts in the app.
-if (process.env.MANAGER_PASSWORD && process.env.MANAGER_EMAIL && !users.hasManager()) {
+// Ensure an admin login from env: whenever MANAGER_EMAIL + MANAGER_PASSWORD are
+// set and that email has no account yet, create a manager for it. This both
+// seeds the first boot and provides a recovery login if you're ever locked out.
+if (
+  process.env.MANAGER_PASSWORD &&
+  process.env.MANAGER_EMAIL &&
+  !users.getByEmail(process.env.MANAGER_EMAIL)
+) {
   const name = (process.env.MANAGER_NAME ?? "Manager").trim() || "Manager";
   users.create({
     name,
@@ -70,7 +75,7 @@ if (process.env.MANAGER_PASSWORD && process.env.MANAGER_EMAIL && !users.hasManag
     role: "manager",
     password: process.env.MANAGER_PASSWORD,
   });
-  console.log(`Seeded manager "${name}" <${process.env.MANAGER_EMAIL}> — log in with that email.`);
+  console.log(`Ensured manager "${name}" <${process.env.MANAGER_EMAIL}> — log in with that email.`);
 }
 
 const upload = multer({

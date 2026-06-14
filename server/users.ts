@@ -71,7 +71,8 @@ export class UserStore {
 
   getByEmail(email: string): User | null {
     const key = email.trim().toLowerCase();
-    return this.users.find((u) => u.email.toLowerCase() === key) ?? null;
+    // Guard against legacy records created before emails existed.
+    return this.users.find((u) => (u.email ?? "").toLowerCase() === key) ?? null;
   }
 
   verify(email: string, password: string): User | null {
