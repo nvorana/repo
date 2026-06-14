@@ -61,11 +61,16 @@ const store = new ReviewStore(DATA_DIR);
 const users = new UserStore(USERS_FILE);
 
 // Seed the first manager account from env on first boot, so the owner always
-// has a way in. After that, the manager creates rep accounts in the app.
-if (process.env.MANAGER_PASSWORD && !users.hasManager()) {
+// has a way in. After that, the manager creates accounts in the app.
+if (process.env.MANAGER_PASSWORD && process.env.MANAGER_EMAIL && !users.hasManager()) {
   const name = (process.env.MANAGER_NAME ?? "Manager").trim() || "Manager";
-  users.create({ name, role: "manager", password: process.env.MANAGER_PASSWORD });
-  console.log(`Seeded manager account "${name}" — log in with that name and MANAGER_PASSWORD.`);
+  users.create({
+    name,
+    email: process.env.MANAGER_EMAIL,
+    role: "manager",
+    password: process.env.MANAGER_PASSWORD,
+  });
+  console.log(`Seeded manager "${name}" <${process.env.MANAGER_EMAIL}> — log in with that email.`);
 }
 
 const upload = multer({
@@ -101,14 +106,14 @@ app.get("/api/health", (_req, res) => {
   });
 });
 
-// --- Auth: individual accounts (name + password) ----------------------------
+// --- Auth: individual accounts (email + password) ---------------------------
 app.post("/api/login", (req, res) => {
-  const name = typeof req.body.name === "string" ? req.body.name : "";
+  const email = typeof req.body.email === "string" ? req.body.email : "";
   const password = typeof req.body.password === "string" ? req.body.password : "";
-  const user = users.verify(name, password);
-  if (!user) return res.status(401).json({ error: "Wrong name or password" });
+  const user = users.verify(email, password);
+  if (!user) return res.status(401).json({ error: "Wrong email or password" });
   setSessionCookie(req, res, user.id);
-  res.json({ name: user.name, role: user.role });
+  res.json({ id: user.id, name: user.name, email: user.email, role: user.role });
 });
 
 app.post("/api/logout", (_req, res) => {
@@ -117,10 +122,12 @@ app.post("/api/logout", (_req, res) => {
 });
 
 app.get("/api/me", (req, res) => {
-  if (!authEnabled()) return res.json({ name: "Admin", role: "manager", authDisabled: true });
+  if (!authEnabled()) {
+    return res.json({ id: "", name: "Admin", email: "", role: "manager", authDisabled: true });
+  }
   const user = currentUser(req);
   if (!user) return res.status(401).json({ error: "Not logged in" });
-  res.json({ name: user.name, role: user.role });
+  res.json({ id: user.id, name: user.name, email: user.email, role: user.role });
 });
 
 // Everything below requires a logged-in user (open when no accounts exist).
@@ -141,11 +148,12 @@ app.get("/api/users", requireManager, (_req, res) => {
 
 app.post("/api/users", requireManager, (req, res) => {
   const name = typeof req.body.name === "string" ? req.body.name : "";
+  const email = typeof req.body.email === "string" ? req.body.email : "";
   const password = typeof req.body.password === "string" ? req.body.password : "";
   const role: Role = req.body.role === "manager" ? "manager" : "rep";
   const wasOpen = !authEnabled(); // before this create
   try {
-    const user = users.create({ name, role, password });
+    const user = users.create({ name, email, role, password });
     // If the very first account is created from open mode, log the creator in
     // as it (when it's a manager) so they don't lock themselves out the instant
     // auth turns on.
@@ -181,9 +189,12 @@ function repReleased(job: { status: string; coach?: { released?: boolean } }): b
   return job.status !== "completed" || Boolean(job.coach?.released);
 }
 
-// Reps can only ever touch their own calls (server-enforced, by account name).
-function repOwns(job: { rep?: string }, user: User | null): boolean {
-  return Boolean(user && job.rep && job.rep.toLowerCase() === user.name.toLowerCase());
+// Reps can only ever touch their own calls (server-enforced). Match on the
+// stable account id; fall back to display name for calls created before ids.
+function repOwns(job: { rep?: string; repId?: string }, user: User | null): boolean {
+  if (!user) return false;
+  if (job.repId) return job.repId === user.id;
+  return Boolean(job.rep && job.rep.toLowerCase() === user.name.toLowerCase());
 }
 
 app.get("/api/frameworks", (_req, res) => {
@@ -209,9 +220,9 @@ app.get("/api/reviews", (req, res) => {
   // withheld from reps on their own calls the coach hasn't released yet.
   res.json(
     visible.map((job) => {
-      const { id, filename, createdAt, status, rep, client, error, result, coach } = job;
+      const { id, filename, createdAt, status, rep, repId, client, error, result, coach } = job;
       const released = Boolean(coach?.released);
-      const base = { id, filename, createdAt, status, rep, client, error, released };
+      const base = { id, filename, createdAt, status, rep, repId, client, error, released };
       if (asRep && !repReleased(job)) {
         return { ...base, coachReviewed: coach?.reviewed ?? false };
       }
@@ -295,18 +306,30 @@ app.post("/api/reviews", upload.single("audio"), (req, res) => {
   }
 
   // The salesperson is the logged-in account (server-trusted). A manager may
-  // upload on behalf of a rep by passing a name; otherwise it's their own.
+  // upload on behalf of a named rep; otherwise the call is owned by the uploader.
   const me = currentUser(req);
   const bodyRep = typeof req.body.rep === "string" ? req.body.rep.trim().slice(0, 80) : "";
   let rep: string | undefined;
-  if (me?.role === "rep") rep = me.name;
-  else rep = bodyRep || me?.name || undefined;
+  let repId: string | undefined;
+  if (me?.role === "rep") {
+    rep = me.name;
+    repId = me.id;
+  } else if (me) {
+    if (bodyRep && bodyRep.toLowerCase() !== me.name.toLowerCase()) {
+      rep = bodyRep; // on behalf of someone else (no owning account id)
+    } else {
+      rep = me.name;
+      repId = me.id;
+    }
+  } else {
+    rep = bodyRep || undefined;
+  }
 
   const client = typeof req.body.client === "string" ? req.body.client.trim().slice(0, 120) : "";
   if (!client) {
     return res.status(400).json({ error: "Client name is required." });
   }
-  const job = store.create(req.file.originalname, rep, client);
+  const job = store.create(req.file.originalname, { rep, repId, client });
 
   // Keep the recording so coaches can replay moments from the report.
   try {

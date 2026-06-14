@@ -173,6 +173,7 @@ export default function App() {
           <RepHome
             reviews={reviews}
             myName={session.name}
+            myId={session.id}
             onUploaded={(id) => {
               refreshList();
               setSelectedId(id);
@@ -190,7 +191,7 @@ export default function App() {
 // --- Login ------------------------------------------------------------------
 
 function LoginScreen({ onLogin }: { onLogin: (s: Session) => void }) {
-  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -200,7 +201,7 @@ function LoginScreen({ onLogin }: { onLogin: (s: Session) => void }) {
     setBusy(true);
     setError(null);
     try {
-      onLogin(await login(name, password));
+      onLogin(await login(email, password));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {
@@ -217,11 +218,11 @@ function LoginScreen({ onLogin }: { onLogin: (s: Session) => void }) {
           </h1>
           <p className="mb-2 text-center text-sm opacity-60">Log in to continue.</p>
           <input
-            type="text"
+            type="email"
             autoFocus
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Your name"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="Email"
             className="input input-bordered w-full"
           />
           <input
@@ -238,7 +239,7 @@ function LoginScreen({ onLogin }: { onLogin: (s: Session) => void }) {
           )}
           <button
             type="submit"
-            disabled={busy || !name || !password}
+            disabled={busy || !email || !password}
             className="btn btn-primary mt-2 w-full"
           >
             {busy ? <span className="loading loading-spinner loading-sm" /> : "Log in"}
@@ -254,16 +255,18 @@ function LoginScreen({ onLogin }: { onLogin: (s: Session) => void }) {
 function RepHome({
   reviews,
   myName,
+  myId,
   onUploaded,
   onSelect,
 }: {
   reviews: ReviewSummary[];
   myName: string;
+  myId: string;
   onUploaded: (id: string) => void;
   onSelect: (id: string) => void;
 }) {
-  const mine = reviews.filter((r) => r.rep === myName);
-  const stats = computeRepStats(mine).find((s) => s.rep === myName);
+  const mine = reviews.filter((r) => (r.repId ? r.repId === myId : r.rep === myName));
+  const stats = computeRepStats(mine)[0];
 
   return (
     <div className="space-y-10">

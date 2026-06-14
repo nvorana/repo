@@ -6,7 +6,8 @@ export type Role = "rep" | "manager";
 
 export interface User {
   id: string;
-  name: string;
+  name: string; // display name (first name)
+  email: string; // unique login identifier
   role: Role;
   salt: string;
   hash: string;
@@ -17,6 +18,7 @@ export interface User {
 export interface PublicUser {
   id: string;
   name: string;
+  email: string;
   role: Role;
   createdAt: string;
 }
@@ -26,7 +28,7 @@ function hashPassword(password: string, salt: string): string {
 }
 
 export function toPublic(u: User): PublicUser {
-  return { id: u.id, name: u.name, role: u.role, createdAt: u.createdAt };
+  return { id: u.id, name: u.name, email: u.email, role: u.role, createdAt: u.createdAt };
 }
 
 /**
@@ -67,13 +69,13 @@ export class UserStore {
     return this.users.find((u) => u.id === id) ?? null;
   }
 
-  getByName(name: string): User | null {
-    const key = name.trim().toLowerCase();
-    return this.users.find((u) => u.name.toLowerCase() === key) ?? null;
+  getByEmail(email: string): User | null {
+    const key = email.trim().toLowerCase();
+    return this.users.find((u) => u.email.toLowerCase() === key) ?? null;
   }
 
-  verify(name: string, password: string): User | null {
-    const u = this.getByName(name);
+  verify(email: string, password: string): User | null {
+    const u = this.getByEmail(email);
     if (!u) return null;
     const candidate = hashPassword(password, u.salt);
     const a = Buffer.from(candidate, "hex");
@@ -82,15 +84,18 @@ export class UserStore {
     return u;
   }
 
-  create(input: { name: string; role: Role; password: string }): User {
+  create(input: { name: string; email: string; role: Role; password: string }): User {
     const name = input.name.trim();
-    if (!name) throw new Error("Name is required");
+    const email = input.email.trim().toLowerCase();
+    if (!name) throw new Error("First name is required");
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Enter a valid email address");
     if (input.password.length < 4) throw new Error("Password must be at least 4 characters");
-    if (this.getByName(name)) throw new Error(`Someone named "${name}" already exists`);
+    if (this.getByEmail(email)) throw new Error(`An account with ${email} already exists`);
     const salt = crypto.randomBytes(16).toString("hex");
     const user: User = {
       id: crypto.randomUUID(),
       name,
+      email,
       role: input.role,
       salt,
       hash: hashPassword(input.password, salt),

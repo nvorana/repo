@@ -29,6 +29,7 @@ export interface ReviewSummary {
   createdAt: string;
   status: JobStatus;
   rep?: string;
+  repId?: string;
   client?: string;
   error?: string;
   released?: boolean;
@@ -88,7 +89,9 @@ function api(path: string, init: RequestInit = {}): Promise<Response> {
 export type Role = "rep" | "manager";
 
 export interface Session {
+  id: string;
   name: string;
+  email: string;
   role: Role;
 }
 
@@ -99,11 +102,11 @@ export async function getSession(): Promise<Session | null> {
   return json<Session>(res);
 }
 
-export async function login(name: string, password: string): Promise<Session> {
+export async function login(email: string, password: string): Promise<Session> {
   const res = await api("/api/login", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ name, password }),
+    body: JSON.stringify({ email, password }),
   });
   return json<Session>(res);
 }
@@ -116,6 +119,7 @@ export async function logout(): Promise<void> {
 export interface AppUser {
   id: string;
   name: string;
+  email: string;
   role: Role;
   createdAt: string;
 }
@@ -124,11 +128,16 @@ export function listUsers(): Promise<AppUser[]> {
   return api("/api/users").then((r) => json<AppUser[]>(r));
 }
 
-export async function createUser(name: string, role: Role, password: string): Promise<AppUser> {
+export async function createUser(
+  name: string,
+  email: string,
+  role: Role,
+  password: string,
+): Promise<AppUser> {
   const res = await api("/api/users", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ name, role, password }),
+    body: JSON.stringify({ name, email, role, password }),
   });
   return json<AppUser>(res);
 }

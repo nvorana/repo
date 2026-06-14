@@ -21,8 +21,10 @@ export interface ReviewJob {
   filename: string;
   createdAt: string;
   status: JobStatus;
-  /** Salesperson on the call, as entered at upload time. */
+  /** Salesperson display name on the call. */
   rep?: string;
+  /** Salesperson account id — the stable owner key (collision-proof). */
+  repId?: string;
   /** Prospect/client on the call, entered at upload time (required in UI). */
   client?: string;
   /** Stored audio file name (under the audio dir), when retained. */
@@ -45,14 +47,18 @@ export class ReviewStore {
     fs.mkdirSync(dir, { recursive: true });
   }
 
-  create(filename: string, rep?: string, client?: string): ReviewJob {
+  create(
+    filename: string,
+    opts: { rep?: string; repId?: string; client?: string } = {},
+  ): ReviewJob {
     const job: ReviewJob = {
       id: crypto.randomUUID(),
       filename,
       createdAt: new Date().toISOString(),
       status: "queued",
-      ...(rep ? { rep } : {}),
-      ...(client ? { client } : {}),
+      ...(opts.rep ? { rep: opts.rep } : {}),
+      ...(opts.repId ? { repId: opts.repId } : {}),
+      ...(opts.client ? { client: opts.client } : {}),
     };
     this.write(job);
     return job;

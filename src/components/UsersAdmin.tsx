@@ -14,6 +14,7 @@ export function UsersAdmin() {
 
   // Add-user form
   const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
   const [role, setRole] = useState<Role>("rep");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -28,8 +29,9 @@ export function UsersAdmin() {
     setBusy(true);
     setError(null);
     try {
-      await createUser(name.trim(), role, password);
+      await createUser(name.trim(), email.trim(), role, password);
       setName("");
+      setEmail("");
       setPassword("");
       setRole("rep");
       refresh();
@@ -76,12 +78,22 @@ export function UsersAdmin() {
           <h2 className="font-semibold">Add a person</h2>
           <div className="flex flex-wrap items-end gap-3">
             <label className="flex flex-col">
-              <span className="mb-1 text-sm opacity-70">Name</span>
+              <span className="mb-1 text-sm opacity-70">First name</span>
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Maria Santos"
-                className="input input-bordered input-sm w-52"
+                placeholder="e.g. Maria"
+                className="input input-bordered input-sm w-40"
+              />
+            </label>
+            <label className="flex flex-col">
+              <span className="mb-1 text-sm opacity-70">Email</span>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="maria@company.com"
+                className="input input-bordered input-sm w-56"
               />
             </label>
             <label className="flex flex-col">
@@ -102,20 +114,20 @@ export function UsersAdmin() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="set a password"
-                className="input input-bordered input-sm w-44"
+                className="input input-bordered input-sm w-40"
               />
             </label>
             <button
               type="submit"
-              disabled={busy || !name.trim() || password.length < 4}
+              disabled={busy || !name.trim() || !email.trim() || password.length < 4}
               className="btn btn-primary btn-sm"
             >
               {busy ? <span className="loading loading-spinner loading-sm" /> : "Add"}
             </button>
           </div>
           <p className="text-xs opacity-50">
-            Share the name + password with the person. They can't change it themselves — you reset it
-            here if needed.
+            Share the email + password with the person — that's how they log in. They can't change it
+            themselves; you reset it here if needed.
           </p>
           {error && (
             <div className="alert alert-error py-2 text-sm">
@@ -133,7 +145,10 @@ export function UsersAdmin() {
               key={u.id}
               className="flex items-center gap-3 rounded-box bg-base-200 px-4 py-3"
             >
-              <span className="font-medium">{u.name}</span>
+              <div className="min-w-0">
+                <span className="font-medium">{u.name}</span>
+                <span className="ml-2 text-sm opacity-50">{u.email}</span>
+              </div>
               <span
                 className={`badge badge-sm ${u.role === "manager" ? "badge-secondary" : "badge-ghost"}`}
               >
