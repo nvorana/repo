@@ -324,7 +324,7 @@ function RepHome({
 
       <section>
         <h2 className="mb-3 text-lg font-semibold">Your calls</h2>
-        <ReviewList reviews={mine} onSelect={onSelect} showRep={false} />
+        <ReviewBrowser reviews={mine} onSelect={onSelect} showRep={false} statusFilter />
       </section>
     </div>
   );
@@ -340,9 +340,7 @@ function ManagerHome({
   onSelect: (id: string) => void;
 }) {
   const queue = reviews.filter((r) => r.status === "completed" && !r.coachReviewed);
-  const [repFilter, setRepFilter] = useState<string>("");
   const reps = [...new Set(reviews.map((r) => r.rep).filter((r): r is string => Boolean(r)))].sort();
-  const visible = repFilter ? reviews.filter((r) => r.rep === repFilter) : reviews;
 
   return (
     <div className="space-y-10">
@@ -361,19 +359,166 @@ function ManagerHome({
             Coaching queue
             <span className="badge badge-warning badge-sm">{queue.length}</span>
           </h2>
-          <ReviewList reviews={queue} onSelect={onSelect} showRep />
+          <ReviewBrowser reviews={queue} onSelect={onSelect} showRep reps={reps} />
         </section>
       )}
 
       <RepDashboard reviews={reviews} />
 
       <section>
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold">All reviews</h2>
-          {reps.length > 0 && (
+        <h2 className="mb-3 text-lg font-semibold">All reviews</h2>
+        <ReviewBrowser reviews={reviews} onSelect={onSelect} showRep reps={reps} statusFilter />
+      </section>
+    </div>
+  );
+}
+
+// --- Shared list ------------------------------------------------------------
+
+function ReviewRow({
+  r,
+  onSelect,
+  showRep,
+}: {
+  r: ReviewSummary;
+  onSelect: (id: string) => void;
+  showRep: boolean;
+}) {
+  const pending = r.status === "completed" && r.overallScore == null && r.released === false;
+  return (
+    <button
+      onClick={() => onSelect(r.id)}
+      className="flex w-full items-center gap-4 rounded-box bg-base-200 p-4 text-left transition-colors hover:bg-base-300"
+    >
+      {pending ? (
+        <ScoreCircle className="bg-base-300 text-base-content/50">🔒</ScoreCircle>
+      ) : (
+        <ScoreBadge status={r.status} score={r.overallScore} />
+      )}
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="truncate font-medium">{r.client ?? r.filename}</span>
+          {showRep && r.rep && <span className="badge badge-info badge-sm">{r.rep}</span>}
+          {r.status === "completed" &&
+            (pending ? (
+              <span className="badge badge-ghost badge-sm">Pending your coach</span>
+            ) : r.coachReviewed ? (
+              <span className="badge badge-success badge-sm">Coached ✓</span>
+            ) : (
+              <span className="badge badge-warning badge-outline badge-sm">Awaiting coach</span>
+            ))}
+        </div>
+        <div className="truncate text-sm opacity-60">
+          {r.status === "failed"
+            ? r.error
+            : pending
+              ? "Your coach will go over this with you, then release it here."
+              : (r.summary ?? STATUS_LABELS[r.status])}
+        </div>
+      </div>
+      <span className="shrink-0 text-xs opacity-50">
+        {new Date(r.createdAt).toLocaleDateString()}
+      </span>
+    </button>
+  );
+}
+
+function dateBucket(iso: string): { order: number; label: string } {
+  const d = new Date(iso);
+  const startOfDay = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const days = Math.round((startOfDay(new Date()) - startOfDay(d)) / 86_400_000);
+  if (days <= 0) return { order: 0, label: "Today" };
+  if (days === 1) return { order: 1, label: "Yesterday" };
+  if (days < 7) return { order: 2, label: "Earlier this week" };
+  if (days < 31) return { order: 3, label: "Earlier this month" };
+  return { order: 4, label: "Older" };
+}
+
+const PAGE = 15;
+
+function ReviewBrowser({
+  reviews,
+  onSelect,
+  showRep,
+  reps,
+  statusFilter = false,
+}: {
+  reviews: ReviewSummary[];
+  onSelect: (id: string) => void;
+  showRep: boolean;
+  /** When provided, shows a per-salesperson dropdown (manager view). */
+  reps?: string[];
+  statusFilter?: boolean;
+}) {
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState<"all" | "awaiting" | "coached">("all");
+  const [repFilter, setRepFilter] = useState("");
+  const [limit, setLimit] = useState(PAGE);
+
+  function reset() {
+    setLimit(PAGE);
+  }
+
+  let filtered = reviews;
+  if (repFilter) filtered = filtered.filter((r) => r.rep === repFilter);
+  if (statusFilter && status !== "all") {
+    filtered = filtered.filter((r) =>
+      status === "coached"
+        ? r.coachReviewed
+        : r.status === "completed" && !r.coachReviewed,
+    );
+  }
+  if (search.trim()) {
+    const q = search.trim().toLowerCase();
+    filtered = filtered.filter((r) => (r.client ?? r.filename).toLowerCase().includes(q));
+  }
+
+  const shown = filtered.slice(0, limit);
+  // shown is already newest-first; bucket into date groups in that order.
+  const groups: { label: string; items: ReviewSummary[] }[] = [];
+  for (const r of shown) {
+    const { label } = dateBucket(r.createdAt);
+    const last = groups[groups.length - 1];
+    if (last && last.label === label) last.items.push(r);
+    else groups.push({ label, items: [r] });
+  }
+
+  const hasControls = Boolean(reps?.length) || statusFilter || reviews.length > 6;
+
+  return (
+    <div>
+      {hasControls && (
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <input
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              reset();
+            }}
+            placeholder="Search client…"
+            className="input input-bordered input-sm w-48"
+          />
+          {statusFilter && (
+            <select
+              value={status}
+              onChange={(e) => {
+                setStatus(e.target.value as typeof status);
+                reset();
+              }}
+              className="select select-bordered select-sm"
+            >
+              <option value="all">All statuses</option>
+              <option value="awaiting">Awaiting coach</option>
+              <option value="coached">Coached</option>
+            </select>
+          )}
+          {reps && reps.length > 0 && (
             <select
               value={repFilter}
-              onChange={(e) => setRepFilter(e.target.value)}
+              onChange={(e) => {
+                setRepFilter(e.target.value);
+                reset();
+              }}
               className="select select-bordered select-sm"
             >
               <option value="">All salespeople</option>
@@ -384,73 +529,42 @@ function ManagerHome({
               ))}
             </select>
           )}
+          <span className="ml-auto text-xs opacity-50">
+            {filtered.length} call{filtered.length === 1 ? "" : "s"}
+          </span>
         </div>
-        <ReviewList reviews={visible} onSelect={onSelect} showRep />
-      </section>
-    </div>
-  );
-}
+      )}
 
-// --- Shared list ------------------------------------------------------------
-
-function ReviewList({
-  reviews,
-  onSelect,
-  showRep,
-}: {
-  reviews: ReviewSummary[];
-  onSelect: (id: string) => void;
-  showRep: boolean;
-}) {
-  if (reviews.length === 0) {
-    return <p className="text-sm opacity-50">No calls here yet.</p>;
-  }
-  return (
-    <ul className="space-y-2">
-      {reviews.map((r) => {
-        const pending = r.status === "completed" && r.overallScore == null && r.released === false;
-        return (
-          <li key={r.id}>
-            <button
-              onClick={() => onSelect(r.id)}
-              className="flex w-full items-center gap-4 rounded-box bg-base-200 p-4 text-left transition-colors hover:bg-base-300"
-            >
-              {pending ? (
-                <ScoreCircle className="bg-base-300 text-base-content/50">🔒</ScoreCircle>
-              ) : (
-                <ScoreBadge status={r.status} score={r.overallScore} />
-              )}
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="truncate font-medium">{r.client ?? r.filename}</span>
-                  {showRep && r.rep && <span className="badge badge-info badge-sm">{r.rep}</span>}
-                  {r.status === "completed" &&
-                    (pending ? (
-                      <span className="badge badge-ghost badge-sm">Pending your coach</span>
-                    ) : r.coachReviewed ? (
-                      <span className="badge badge-success badge-sm">Coached ✓</span>
-                    ) : (
-                      <span className="badge badge-warning badge-outline badge-sm">
-                        Awaiting coach
-                      </span>
-                    ))}
-                </div>
-                <div className="truncate text-sm opacity-60">
-                  {r.status === "failed"
-                    ? r.error
-                    : pending
-                      ? "Your coach will go over this with you, then release it here."
-                      : (r.summary ?? STATUS_LABELS[r.status])}
-                </div>
+      {filtered.length === 0 ? (
+        <p className="text-sm opacity-50">No calls here.</p>
+      ) : (
+        <div className="space-y-5">
+          {groups.map((g) => (
+            <div key={g.label}>
+              <div className="mb-2 text-xs font-semibold uppercase tracking-wide opacity-40">
+                {g.label}
               </div>
-              <span className="shrink-0 text-xs opacity-50">
-                {new Date(r.createdAt).toLocaleDateString()}
-              </span>
-            </button>
-          </li>
-        );
-      })}
-    </ul>
+              <ul className="space-y-2">
+                {g.items.map((r) => (
+                  <li key={r.id}>
+                    <ReviewRow r={r} onSelect={onSelect} showRep={showRep} />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {filtered.length > limit && (
+        <button
+          onClick={() => setLimit((l) => l + PAGE)}
+          className="btn btn-outline btn-sm mt-4 w-full"
+        >
+          Show more ({filtered.length - limit} more)
+        </button>
+      )}
+    </div>
   );
 }
 
