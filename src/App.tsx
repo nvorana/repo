@@ -15,9 +15,10 @@ import {
 import { UploadCard } from "./components/UploadCard.tsx";
 import { Report } from "./components/Report.tsx";
 import { UsersAdmin } from "./components/UsersAdmin.tsx";
+import { Reports } from "./components/Reports.tsx";
 
 const POLL_MS = 4000;
-type ManagerTab = "team" | "mine" | "people";
+type ManagerTab = "team" | "mine" | "reports" | "people";
 
 export default function App() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
@@ -104,6 +105,7 @@ export default function App() {
   const managerTabs: { id: ManagerTab; label: string; short: string }[] = [
     { id: "team", label: "Team Coaching", short: "Team" },
     { id: "mine", label: "My Coaching", short: "Mine" },
+    { id: "reports", label: "Reports", short: "Reports" },
     { id: "people", label: "People", short: "People" },
   ];
 
@@ -167,6 +169,8 @@ export default function App() {
               refreshList();
             }}
           />
+        ) : isManager && tab === "reports" ? (
+          <Reports reviews={reviews} />
         ) : isManager && tab === "people" ? (
           <UsersAdmin />
         ) : showingMine ? (
