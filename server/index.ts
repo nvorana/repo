@@ -108,6 +108,12 @@ app.get("/api/health", (_req, res) => {
     authEnabled: authEnabled(),
     anthropicKey: Boolean(process.env.ANTHROPIC_API_KEY),
     assemblyaiKey: Boolean(process.env.ASSEMBLYAI_API_KEY),
+    dataDir: DATA_DIR,
+    audioDir: AUDIO_DIR,
+    // True when storage points at a mounted volume path (persists across deploys).
+    persistentStorage: DATA_DIR.startsWith("/data"),
+    reviewCount: store.list().length,
+    userCount: users.count(),
   });
 });
 
@@ -394,4 +400,14 @@ if (fs.existsSync(DIST_DIR)) {
 
 app.listen(PORT, () => {
   console.log(`Sales call review API listening on http://localhost:${PORT}`);
+  console.log(
+    `Storage: DATA_DIR=${DATA_DIR} AUDIO_DIR=${AUDIO_DIR} ` +
+      `(persistent=${DATA_DIR.startsWith("/data")}, reviews=${store.list().length}, users=${users.count()})`,
+  );
+  if (!DATA_DIR.startsWith("/data")) {
+    console.warn(
+      "WARNING: DATA_DIR is not on a mounted volume — uploads will be LOST on every redeploy. " +
+        "Set DATA_DIR=/data/reviews and AUDIO_DIR=/data/audio and attach a volume at /data.",
+    );
+  }
 });
