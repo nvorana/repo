@@ -41,9 +41,30 @@ export class UserStore {
 
   constructor(file: string) {
     this.file = file;
-    fs.mkdirSync(path.dirname(file), { recursive: true });
+    try {
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+    } catch (err) {
+      console.error(
+        `FATAL: cannot create/write users dir "${path.dirname(file)}". Is the volume mounted at /data?`,
+        err,
+      );
+      throw err;
+    }
     if (fs.existsSync(file)) {
-      this.users = JSON.parse(fs.readFileSync(file, "utf8")) as User[];
+      try {
+        this.users = JSON.parse(fs.readFileSync(file, "utf8")) as User[];
+      } catch (err) {
+        // Corrupt accounts file must not block boot — back it up and continue.
+        // The env-seed will recreate the manager so you can still log in.
+        const backup = `${file}.corrupt-${Date.now()}`;
+        console.error(`users.json is corrupt; backing up to ${backup} and starting fresh:`, err);
+        try {
+          fs.renameSync(file, backup);
+        } catch {
+          /* ignore */
+        }
+        this.users = [];
+      }
     }
   }
 

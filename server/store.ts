@@ -44,7 +44,15 @@ export class ReviewStore {
 
   constructor(dir: string) {
     this.dir = dir;
-    fs.mkdirSync(dir, { recursive: true });
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+    } catch (err) {
+      console.error(
+        `FATAL: cannot create/write data dir "${dir}". Is the volume mounted at /data?`,
+        err,
+      );
+      throw err;
+    }
   }
 
   create(
@@ -75,15 +83,25 @@ export class ReviewStore {
   get(id: string): ReviewJob | null {
     const file = this.fileFor(id);
     if (!fs.existsSync(file)) return null;
-    return JSON.parse(fs.readFileSync(file, "utf8")) as ReviewJob;
+    try {
+      return JSON.parse(fs.readFileSync(file, "utf8")) as ReviewJob;
+    } catch (err) {
+      console.error(`Skipping unreadable review file ${file}:`, err);
+      return null;
+    }
   }
 
   list(): ReviewJob[] {
-    return fs
-      .readdirSync(this.dir)
-      .filter((f) => f.endsWith(".json"))
-      .map((f) => JSON.parse(fs.readFileSync(path.join(this.dir, f), "utf8")) as ReviewJob)
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    // One corrupt/partial file must not break the whole list — skip it.
+    const jobs: ReviewJob[] = [];
+    for (const f of fs.readdirSync(this.dir).filter((f) => f.endsWith(".json"))) {
+      try {
+        jobs.push(JSON.parse(fs.readFileSync(path.join(this.dir, f), "utf8")) as ReviewJob);
+      } catch (err) {
+        console.error(`Skipping unreadable review file ${f}:`, err);
+      }
+    }
+    return jobs.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
   private fileFor(id: string): string {
