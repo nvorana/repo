@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SalesCallOS — Salesperson Quick Start</title>
+    <style>
+      :root {
+        --ink: #1f2733;
+        --muted: #5b6675;
+        --amber: #d98a1f;
+        --amber-soft: #fbf3e4;
+        --line: #e6e8ec;
+        --green: #2e9e6b;
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0; padding: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        color: var(--ink); background: #fff;
+        -webkit-print-color-adjust: exact; print-color-adjust: exact;
+      }
+      .page { max-width: 820px; margin: 0 auto; padding: 36px 44px; }
+      header { display: flex; align-items: baseline; justify-content: space-between; border-bottom: 2px solid var(--line); padding-bottom: 14px; }
+      .brand { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; }
+      .brand span { color: var(--amber); }
+      .role { font-size: 13px; font-weight: 700; color: var(--amber); text-transform: uppercase; letter-spacing: 0.08em; }
+      .lede { color: var(--muted); font-size: 14px; margin: 14px 0 22px; line-height: 1.55; }
+      h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--amber); margin: 22px 0 8px; }
+      .login { background: var(--amber-soft); border: 1px solid #f0dcb8; border-radius: 12px; padding: 16px 18px; font-size: 14px; line-height: 2.1; }
+      .login .row { display: flex; gap: 8px; align-items: baseline; }
+      .login b { font-weight: 700; min-width: 92px; display: inline-block; }
+      .blank { flex: 1; border-bottom: 1.5px solid #d8c39a; min-height: 1.2em; }
+      .note { font-size: 12.5px; color: var(--muted); margin-top: 6px; }
+      ol.steps { counter-reset: step; list-style: none; padding: 0; margin: 0; }
+      ol.steps > li {
+        counter-increment: step; position: relative;
+        padding: 8px 0 8px 40px; font-size: 14px; line-height: 1.5; border-bottom: 1px solid var(--line);
+      }
+      ol.steps > li:last-child { border-bottom: none; }
+      ol.steps > li::before {
+        content: counter(step); position: absolute; left: 0; top: 8px;
+        width: 26px; height: 26px; border-radius: 50%;
+        background: var(--amber); color: #fff; font-weight: 700; font-size: 13px;
+        display: flex; align-items: center; justify-content: center;
+      }
+      .li-title { font-weight: 700; }
+      .li-sub { color: var(--muted); }
+      .lock { background: #f4faf6; border-left: 4px solid var(--green); border-radius: 8px; padding: 12px 14px; font-size: 14px; line-height: 1.55; margin-top: 6px; }
+      .lock b { color: var(--green); }
+      .gets { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+      .chip { background: #eef2f7; border-radius: 999px; padding: 4px 12px; font-size: 12.5px; font-weight: 600; }
+      footer { margin-top: 24px; border-top: 1px solid var(--line); padding-top: 12px; font-size: 12.5px; color: var(--muted); display: flex; justify-content: space-between; }
+      @media print { .page { padding: 18px 24px; } }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <header>
+        <div class="brand">SalesCall<span>OS</span></div>
+        <div class="role">Your Quick Start</div>
+      </header>
+
+      <p class="lede">
+        SalesCallOS is your <b>personal coaching tool</b>. Upload your sales calls and it reviews them
+        against our Accelerator script — what you did well, what to tweak, and the one thing to work on
+        next. It's here to help you handle objections better, sound more confident, and close more.
+        <b>Only you and your coach see your calls.</b>
+      </p>
+
+      <h2>Your login</h2>
+      <div class="login">
+        <div class="row"><b>Open</b><span>salesos.chillyonaryo.com</span></div>
+        <div class="row"><b>Email</b><span class="blank"></span></div>
+        <div class="row"><b>Password</b><span class="blank"></span></div>
+      </div>
+      <p class="note">You don't sign up — your login is created for you. Just use the email and password above.
+        Works on your laptop or phone.</p>
+
+      <h2>How it works</h2>
+      <ol class="steps">
+        <li>
+          <span class="li-title">Log in &amp; go to “My Coaching.”</span>
+          <span class="li-sub"> It's your private space — just your calls.</span>
+        </li>
+        <li>
+          <span class="li-title">Upload a call.</span>
+          <span class="li-sub"> Type the <b>client's name</b>, then drop in the recording (mp3, m4a, wav…). That's it.</span>
+        </li>
+        <li>
+          <span class="li-title">Let it work (a few minutes).</span>
+          <span class="li-sub"> You'll see it transcribe and review in the background — you can leave and come back.</span>
+        </li>
+        <li>
+          <span class="li-title">Watch your progress.</span>
+          <span class="li-sub"> Your average score, your latest call, and your <b>“Focus this week”</b> — the one skill to level up.</span>
+        </li>
+        <li>
+          <span class="li-title">Get coached.</span>
+          <span class="li-sub"> Your coach reviews each call with you, then unlocks the full report and notes for you to keep.</span>
+        </li>
+      </ol>
+
+      <h2>What you'll get on each call</h2>
+      <div class="gets">
+        <span class="chip">Score / 10</span>
+        <span class="chip">What went right</span>
+        <span class="chip">What to improve</span>
+        <span class="chip">Objections you missed</span>
+        <span class="chip">▶ Replay key moments</span>
+        <span class="chip">Your #1 focus</span>
+      </div>
+
+      <h2>The 🔒 you'll see</h2>
+      <div class="lock">
+        Right after uploading, a call shows a <b>🔒 “Pending your coach.”</b> That's normal — your coach
+        goes through it <b>with you</b> first, then releases it so you see the full report and feedback.
+        The point is real coaching, not a number on a screen.
+      </div>
+
+      <h2>The daily habit</h2>
+      <p class="lede" style="margin: 6px 0 0">
+        Upload your consultation calls at the <b>end of each day</b>. The reps who review their own calls
+        are the ones who improve fastest — this makes that effortless.
+      </p>
+
+      <footer>
+        <span>SalesCallOS · Negosyo University</span>
+        <span>Questions? Ask your coach.</span>
+      </footer>
+    </div>
+  </body>
+</html>
