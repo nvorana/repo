@@ -7,6 +7,7 @@ import {
   login,
   logout,
   saveCoachFeedback,
+  deleteReview,
   STATUS_LABELS,
   type ReviewJob,
   type ReviewSummary,
@@ -821,11 +822,33 @@ function DetailView({
   onBack: () => void;
   onUpdated: (job: ReviewJob) => void;
 }) {
+  const [deleting, setDeleting] = useState(false);
+
+  async function remove() {
+    if (!job) return;
+    if (!window.confirm(`Delete this call (${job.client ?? job.filename})? This also removes the recording and frees disk space. This can't be undone.`)) return;
+    setDeleting(true);
+    try {
+      await deleteReview(job.id);
+      onBack();
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Could not delete");
+      setDeleting(false);
+    }
+  }
+
   return (
     <div>
-      <button onClick={onBack} className="print-hide btn btn-ghost btn-sm mb-6">
-        ← Back
-      </button>
+      <div className="print-hide mb-6 flex items-center justify-between">
+        <button onClick={onBack} className="btn btn-ghost btn-sm">
+          ← Back
+        </button>
+        {job && canCoach && (
+          <button onClick={() => void remove()} disabled={deleting} className="btn btn-ghost btn-sm text-error">
+            {deleting ? <span className="loading loading-spinner loading-sm" /> : "🗑 Delete call"}
+          </button>
+        )}
+      </div>
 
       {!job ? (
         <span className="loading loading-spinner text-primary" />

@@ -54,6 +54,11 @@ export interface ReviewJob {
   result?: CallReviewResult;
 }
 
+export async function deleteReview(id: string): Promise<void> {
+  const res = await api(`/api/reviews/${id}`, { method: "DELETE" });
+  await json(res);
+}
+
 export async function saveCoachFeedback(
   id: string,
   notes: string,

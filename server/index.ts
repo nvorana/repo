@@ -69,13 +69,18 @@ if (
   !users.getByEmail(process.env.MANAGER_EMAIL)
 ) {
   const name = (process.env.MANAGER_NAME ?? "Manager").trim() || "Manager";
-  users.create({
-    name,
-    email: process.env.MANAGER_EMAIL,
-    role: "manager",
-    password: process.env.MANAGER_PASSWORD,
-  });
-  console.log(`Ensured manager "${name}" <${process.env.MANAGER_EMAIL}> — log in with that email.`);
+  try {
+    users.create({
+      name,
+      email: process.env.MANAGER_EMAIL,
+      role: "manager",
+      password: process.env.MANAGER_PASSWORD,
+    });
+    console.log(`Ensured manager "${name}" <${process.env.MANAGER_EMAIL}> — log in with that email.`);
+  } catch (err) {
+    // A bad MANAGER_* config must not crash the whole app on boot.
+    console.error("Could not seed manager from env (check MANAGER_EMAIL/PASSWORD):", err);
+  }
 }
 
 const upload = multer({
@@ -251,6 +256,22 @@ app.get("/api/reviews", (req, res) => {
       };
     }),
   );
+});
+
+app.delete("/api/reviews/:id", requireManager, (req, res) => {
+  const job = store.get(String(req.params.id));
+  if (!job) return res.status(404).json({ error: "Review not found" });
+  // Remove the audio file too — that's what frees disk space.
+  if (job.audioFile) {
+    const file = path.join(AUDIO_DIR, path.basename(job.audioFile));
+    try {
+      if (fs.existsSync(file)) fs.rmSync(file);
+    } catch (err) {
+      console.error(`Could not delete audio for ${job.id}:`, err);
+    }
+  }
+  store.delete(job.id);
+  res.json({ ok: true });
 });
 
 app.post("/api/reviews/:id/coach", requireManager, (req, res) => {

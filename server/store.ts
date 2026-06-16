@@ -104,6 +104,11 @@ export class ReviewStore {
     return jobs.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
+  delete(id: string): void {
+    const file = this.fileFor(id);
+    if (fs.existsSync(file)) fs.rmSync(file);
+  }
+
   private fileFor(id: string): string {
     // ids are server-generated UUIDs, but never trust them as raw paths
     return path.join(this.dir, `${path.basename(id)}.json`);
