@@ -811,6 +811,10 @@ function CoachPanel({
 
 // --- Detail view ------------------------------------------------------------
 
+// Accelerator pricing was corrected on 2026-06-28; reviews scored before then
+// judged "Pricing & The Silence" against the old figures. Flag them in the UI.
+const PRICING_FIX_AT = new Date("2026-06-28T20:00:00Z");
+
 function DetailView({
   job,
   canCoach,
@@ -872,6 +876,20 @@ function DetailView({
               🖨 Print / Save PDF
             </button>
           </div>
+          {job.result.frameworkId === "accelerator-program" &&
+            new Date(job.createdAt) < PRICING_FIX_AT && (
+              <div className="alert alert-warning mb-4">
+                <div>
+                  <p className="font-medium">⚠ Scored under the old pricing</p>
+                  <p className="text-sm opacity-80">
+                    This review was generated before pricing was corrected (June 2026). If the call
+                    discussed pricing, read the “Pricing &amp; The Silence” score with caution — it
+                    may have been judged against the previous figures (₱29,000 one-time / ₱14,500×2)
+                    rather than the current ₱28,000 / ₱15,500×2.
+                  </p>
+                </div>
+              </div>
+            )}
           <CoachPanel job={job} canEdit={canCoach} onUpdated={onUpdated} />
           <Report result={job.result} reviewId={job.id} />
         </div>
