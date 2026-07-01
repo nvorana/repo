@@ -27,8 +27,12 @@ export interface ReviewJob {
   repId?: string;
   /** Prospect/client on the call, entered at upload time (required in UI). */
   client?: string;
-  /** Stored audio file name (under the audio dir), when retained. */
+  /** Stored audio file name (under the audio dir), when retained. Legacy single-file uploads. */
   audioFile?: string;
+  /** Stored rep-track audio file name (separate-tracks uploads). */
+  repAudioFile?: string;
+  /** Stored client-track audio file name (separate-tracks uploads). */
+  clientAudioFile?: string;
   coach?: CoachFeedback;
   error?: string;
   result?: CallReviewResult;

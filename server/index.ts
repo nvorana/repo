@@ -8,7 +8,7 @@ import {
   AssemblyAIProvider,
   defaultFramework,
   frameworkFromMarkdown,
-  reviewCall,
+  reviewCallFromTracks,
   type SalesFramework,
 } from "../core/index.ts";
 import { ReviewStore } from "./store.ts";
@@ -353,9 +353,10 @@ app.delete("/api/reviews/:id", requireManager, (req, res) => {
   const job = store.get(String(req.params.id));
   if (!job) return res.status(404).json({ error: "Review not found" });
   if (!managerCanSee(job, currentUser(req))) return res.status(404).json({ error: "Review not found" });
-  // Remove the audio file too — that's what frees disk space.
-  if (job.audioFile) {
-    const file = path.join(AUDIO_DIR, path.basename(job.audioFile));
+  // Remove the audio files too — that's what frees disk space.
+  for (const name of [job.audioFile, job.repAudioFile, job.clientAudioFile]) {
+    if (!name) continue;
+    const file = path.join(AUDIO_DIR, path.basename(name));
     try {
       if (fs.existsSync(file)) fs.rmSync(file);
     } catch (err) {
@@ -381,7 +382,15 @@ app.post("/api/reviews/:id/coach", requireManager, (req, res) => {
 
 app.get("/api/reviews/:id/audio", (req, res) => {
   const job = store.get(String(req.params.id));
-  if (!job?.audioFile) return res.status(404).json({ error: "No audio stored for this review" });
+  if (!job) return res.status(404).json({ error: "Review not found" });
+  const track = req.query.track === "client" ? "client" : req.query.track === "rep" ? "rep" : null;
+  const name =
+    track === "rep"
+      ? (job.repAudioFile ?? job.audioFile)
+      : track === "client"
+        ? job.clientAudioFile
+        : (job.audioFile ?? job.repAudioFile);
+  if (!name) return res.status(404).json({ error: "No audio stored for this review" });
   const user = currentUser(req);
   if (roleOf(req) === "rep") {
     if (!repOwns(job, user)) return res.status(404).json({ error: "Review not found" });
@@ -391,7 +400,7 @@ app.get("/api/reviews/:id/audio", (req, res) => {
   } else if (!managerCanSee(job, user)) {
     return res.status(404).json({ error: "Review not found" });
   }
-  const file = path.join(AUDIO_DIR, path.basename(job.audioFile));
+  const file = path.join(AUDIO_DIR, path.basename(name));
   if (!fs.existsSync(file)) return res.status(404).json({ error: "Audio file missing" });
   res.sendFile(file);
 });
@@ -416,9 +425,14 @@ app.get("/api/reviews/:id", (req, res) => {
   res.json({ ...job, released });
 });
 
-app.post("/api/reviews", upload.single("audio"), (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ error: "Upload an audio file in the 'audio' field." });
+app.post("/api/reviews", upload.fields([{ name: "repAudio", maxCount: 1 }, { name: "clientAudio", maxCount: 1 }]), (req, res) => {
+  const files = req.files as Record<string, Express.Multer.File[]> | undefined;
+  const repFile = files?.repAudio?.[0];
+  const clientFile = files?.clientAudio?.[0];
+  if (!repFile || !clientFile) {
+    return res
+      .status(400)
+      .json({ error: "Upload both audio files: your recording and the client's recording." });
   }
   if (!process.env.ASSEMBLYAI_API_KEY || !process.env.ANTHROPIC_API_KEY) {
     return res.status(503).json({
@@ -458,15 +472,18 @@ app.post("/api/reviews", upload.single("audio"), (req, res) => {
   if (!client) {
     return res.status(400).json({ error: "Client name is required." });
   }
-  const job = store.create(req.file.originalname, { rep, repId, client });
+  const job = store.create(repFile.originalname, { rep, repId, client });
 
-  // Keep the recording so coaches can replay moments from the report.
+  // Persist both tracks so coaches can replay each side from the report.
   try {
     fs.mkdirSync(AUDIO_DIR, { recursive: true });
-    const ext = path.extname(req.file.originalname).slice(0, 10) || ".audio";
-    const audioFile = `${job.id}${ext}`;
-    fs.writeFileSync(path.join(AUDIO_DIR, audioFile), req.file.buffer);
-    store.update(job.id, { audioFile });
+    const repExt = path.extname(repFile.originalname).slice(0, 10) || ".audio";
+    const clientExt = path.extname(clientFile.originalname).slice(0, 10) || ".audio";
+    const repAudioFile = `${job.id}-rep${repExt}`;
+    const clientAudioFile = `${job.id}-client${clientExt}`;
+    fs.writeFileSync(path.join(AUDIO_DIR, repAudioFile), repFile.buffer);
+    fs.writeFileSync(path.join(AUDIO_DIR, clientAudioFile), clientFile.buffer);
+    store.update(job.id, { repAudioFile, clientAudioFile });
   } catch (err) {
     console.error(`Could not persist audio for ${job.id}:`, err);
   }
@@ -474,17 +491,25 @@ app.post("/api/reviews", upload.single("audio"), (req, res) => {
   res.status(202).json({ id: job.id, status: job.status });
 
   // Fire-and-forget; clients poll GET /api/reviews/:id for progress.
-  void runReview(job.id, req.file, framework);
+  void runReview(job.id, repFile, clientFile, framework);
 });
 
 async function runReview(
   jobId: string,
-  file: { buffer: Buffer; originalname: string; mimetype: string },
+  repFile: { buffer: Buffer; originalname: string; mimetype: string },
+  clientFile: { buffer: Buffer; originalname: string; mimetype: string },
   framework: SalesFramework,
 ) {
   try {
-    const result = await reviewCall(
-      { data: file.buffer, filename: file.originalname, mimeType: file.mimetype },
+    const result = await reviewCallFromTracks(
+      {
+        repAudio: { data: repFile.buffer, filename: repFile.originalname, mimeType: repFile.mimetype },
+        clientAudio: {
+          data: clientFile.buffer,
+          filename: clientFile.originalname,
+          mimeType: clientFile.mimetype,
+        },
+      },
       {
         transcriber: new AssemblyAIProvider(process.env.ASSEMBLYAI_API_KEY!),
         framework,
