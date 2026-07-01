@@ -102,6 +102,8 @@ export default function App() {
 
   const isManager = session.role === "manager";
   const showingMine = !isManager || tab === "mine";
+  // A manager's own calls are personal — keep them out of the team views.
+  const teamReviews = reviews.filter((r) => r.repId !== session.id);
 
   const managerTabs: { id: ManagerTab; label: string; short: string }[] = [
     { id: "team", label: "Team Coaching", short: "Team" },
@@ -171,7 +173,7 @@ export default function App() {
             }}
           />
         ) : isManager && tab === "reports" ? (
-          <Reports reviews={reviews} />
+          <Reports reviews={teamReviews} />
         ) : isManager && tab === "people" ? (
           <UsersAdmin />
         ) : showingMine ? (
@@ -186,7 +188,7 @@ export default function App() {
             onSelect={setSelectedId}
           />
         ) : (
-          <ManagerHome reviews={reviews} onSelect={setSelectedId} />
+          <ManagerHome reviews={teamReviews} onSelect={setSelectedId} />
         )}
       </main>
     </div>
@@ -348,7 +350,7 @@ function ManagerHome({
   const reps = [...new Set(reviews.map((r) => r.rep).filter((r): r is string => Boolean(r)))].sort();
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-6">
       <section>
         <h1 className="mb-1 text-2xl font-bold">Team coaching</h1>
         <p className="opacity-60">
@@ -358,22 +360,30 @@ function ManagerHome({
         </p>
       </section>
 
-      {queue.length > 0 && (
-        <section>
-          <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold">
-            Coaching queue
-            <span className="badge badge-warning badge-sm">{queue.length}</span>
-          </h2>
-          <ReviewBrowser reviews={queue} onSelect={onSelect} showRep reps={reps} />
-        </section>
-      )}
-
+      <TeamSummary reviews={reviews} />
       <RepDashboard reviews={reviews} />
 
-      <section>
-        <h2 className="mb-3 text-lg font-semibold">All reviews</h2>
-        <ReviewBrowser reviews={reviews} onSelect={onSelect} showRep reps={reps} statusFilter />
-      </section>
+      {queue.length > 0 && (
+        <div className="collapse-arrow collapse rounded-box border border-base-300 bg-base-100">
+          <input type="checkbox" />
+          <div className="collapse-title font-semibold">
+            Needs your coaching <span className="badge badge-warning badge-sm">{queue.length}</span>
+          </div>
+          <div className="collapse-content">
+            <ReviewBrowser reviews={queue} onSelect={onSelect} showRep reps={reps} />
+          </div>
+        </div>
+      )}
+
+      <div className="collapse-arrow collapse rounded-box border border-base-300 bg-base-100">
+        <input type="checkbox" />
+        <div className="collapse-title font-semibold">
+          All reviews <span className="opacity-50">({reviews.length})</span>
+        </div>
+        <div className="collapse-content">
+          <ReviewBrowser reviews={reviews} onSelect={onSelect} showRep reps={reps} statusFilter />
+        </div>
+      </div>
     </div>
   );
 }
@@ -592,6 +602,12 @@ function computeRepStats(reviews: ReviewSummary[]): RepStats[] {
       byRep.set(r.rep, list);
     }
   }
+  const priority = (s: { avgScore: number; lastScore: number; calls: number }) => {
+    const trend = s.calls > 1 ? s.lastScore - s.avgScore : 0;
+    if (trend < -0.2) return 0; // slipping
+    if (trend > 0.2) return 2; // improving
+    return 1; // steady / single-call
+  };
   return [...byRep.entries()]
     .map(([rep, list]) => {
       const scores = list.map((r) => r.overallScore!);
@@ -614,7 +630,39 @@ function computeRepStats(reviews: ReviewSummary[]): RepStats[] {
         weakest,
       };
     })
-    .sort((a, b) => b.calls - a.calls);
+    .sort((a, b) => priority(a) - priority(b) || a.avgScore - b.avgScore);
+}
+
+function TeamSummary({ reviews }: { reviews: ReviewSummary[] }) {
+  const stats = computeRepStats(reviews);
+  if (stats.length === 0) return null;
+  const trendOf = (s: RepStats) => (s.calls > 1 ? s.lastScore - s.avgScore : 0);
+  const slipping = stats.filter((s) => trendOf(s) < -0.2);
+  const improving = stats.filter((s) => trendOf(s) > 0.2).length;
+  const steady = stats.length - slipping.length - improving;
+  const teamAvg = stats.reduce((a, s) => a + s.avgScore, 0) / stats.length;
+  const worst = slipping[0] ?? stats[0];
+
+  return (
+    <section className="rounded-box border border-warning/30 bg-warning/5 p-4">
+      <h2 className="text-lg font-bold">Team performance</h2>
+      <p className="text-sm opacity-60">Where everyone stands at a glance.</p>
+      <div className="stats stats-horizontal mt-3 w-full overflow-x-auto bg-base-100 shadow-sm">
+        <div className="stat py-3"><div className="stat-title text-xs">Team avg /10</div><div className="stat-value text-2xl">{teamAvg.toFixed(1)}</div></div>
+        <div className="stat py-3"><div className="stat-title text-xs">Active reps</div><div className="stat-value text-2xl">{stats.length}</div></div>
+        <div className="stat py-3"><div className="stat-title text-xs">Slipping</div><div className="stat-value text-2xl text-error">{slipping.length}</div></div>
+        <div className="stat py-3"><div className="stat-title text-xs">Steady</div><div className="stat-value text-2xl opacity-70">{steady}</div></div>
+        <div className="stat py-3"><div className="stat-title text-xs">Improving</div><div className="stat-value text-2xl text-success">{improving}</div></div>
+      </div>
+      {worst && trendOf(worst) < -0.2 && (
+        <div className="mt-3 rounded-box border-l-4 border-error bg-error/10 p-3 text-sm">
+          <span className="font-semibold text-error">Needs attention: </span>
+          {worst.rep} is slipping ({worst.avgScore.toFixed(1)})
+          {worst.weakest ? ` — weakest skill: ${worst.weakest.name}.` : "."}
+        </div>
+      )}
+    </section>
+  );
 }
 
 function RepDashboard({ reviews }: { reviews: ReviewSummary[] }) {

@@ -213,6 +213,18 @@ function repOwns(job: { rep?: string; repId?: string }, user: User | null): bool
   return Boolean(job.rep && job.rep.toLowerCase() === user.name.toLowerCase());
 }
 
+// A call whose owner account is a manager is "personal" to that manager.
+function ownerIsManager(job: { repId?: string }): boolean {
+  return job.repId ? users.getById(job.repId)?.role === "manager" : false;
+}
+
+// A manager sees all rep-owned calls plus their OWN personal calls,
+// but never another manager's personal calls.
+function managerCanSee(job: { repId?: string }, user: User | null): boolean {
+  if (!ownerIsManager(job)) return true;
+  return Boolean(user && job.repId === user.id);
+}
+
 app.get("/api/frameworks", (_req, res) => {
   const frameworks = loadFrameworks();
   const defaultId = pickDefaultFrameworkId(frameworks);
@@ -230,7 +242,9 @@ app.get("/api/reviews", (req, res) => {
   const user = currentUser(req);
   const asRep = roleOf(req) === "rep";
   // Reps see only their own calls; the manager sees everyone.
-  const visible = asRep ? store.list().filter((job) => repOwns(job, user)) : store.list();
+  const visible = asRep
+    ? store.list().filter((job) => repOwns(job, user))
+    : store.list().filter((job) => managerCanSee(job, user));
   // List view stays light: omit transcripts and report bodies, but include
   // per-criterion scores so the UI can aggregate rep performance. Scores are
   // withheld from reps on their own calls the coach hasn't released yet.
@@ -261,6 +275,7 @@ app.get("/api/reviews", (req, res) => {
 app.delete("/api/reviews/:id", requireManager, (req, res) => {
   const job = store.get(String(req.params.id));
   if (!job) return res.status(404).json({ error: "Review not found" });
+  if (!managerCanSee(job, currentUser(req))) return res.status(404).json({ error: "Review not found" });
   // Remove the audio file too — that's what frees disk space.
   if (job.audioFile) {
     const file = path.join(AUDIO_DIR, path.basename(job.audioFile));
@@ -277,6 +292,7 @@ app.delete("/api/reviews/:id", requireManager, (req, res) => {
 app.post("/api/reviews/:id/coach", requireManager, (req, res) => {
   const job = store.get(String(req.params.id));
   if (!job) return res.status(404).json({ error: "Review not found" });
+  if (!managerCanSee(job, currentUser(req))) return res.status(404).json({ error: "Review not found" });
   const notes = typeof req.body.notes === "string" ? req.body.notes.slice(0, 10_000) : "";
   const reviewed = Boolean(req.body.reviewed);
   const released = Boolean(req.body.released);
@@ -295,6 +311,8 @@ app.get("/api/reviews/:id/audio", (req, res) => {
     if (!repReleased(job)) {
       return res.status(403).json({ error: "Your coach hasn't released this call yet." });
     }
+  } else if (!managerCanSee(job, user)) {
+    return res.status(404).json({ error: "Review not found" });
   }
   const file = path.join(AUDIO_DIR, path.basename(job.audioFile));
   if (!fs.existsSync(file)) return res.status(404).json({ error: "Audio file missing" });
@@ -305,8 +323,8 @@ app.get("/api/reviews/:id", (req, res) => {
   const job = store.get(String(req.params.id));
   if (!job) return res.status(404).json({ error: "Review not found" });
   const released = Boolean(job.coach?.released);
+  const user = currentUser(req);
   if (roleOf(req) === "rep") {
-    const user = currentUser(req);
     if (!repOwns(job, user)) return res.status(404).json({ error: "Review not found" });
     if (!repReleased(job)) {
       // Hide the report body and coach notes until released.
@@ -315,6 +333,8 @@ app.get("/api/reviews/:id", (req, res) => {
       void _c;
       return res.json({ ...rest, released });
     }
+  } else if (!managerCanSee(job, user)) {
+    return res.status(404).json({ error: "Review not found" });
   }
   res.json({ ...job, released });
 });
