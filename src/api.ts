@@ -77,6 +77,10 @@ export function audioUrl(id: string): string {
   return `/api/reviews/${id}/audio`;
 }
 
+export function userAvatarUrl(id: string): string {
+  return `/api/users/${id}/avatar`;
+}
+
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as { error?: string } | null;
@@ -129,6 +133,7 @@ export interface AppUser {
   email: string;
   role: Role;
   createdAt: string;
+  hasAvatar?: boolean;
 }
 
 export function listUsers(): Promise<AppUser[]> {
@@ -160,6 +165,18 @@ export async function resetUserPassword(id: string, password: string): Promise<v
 
 export async function deleteUser(id: string): Promise<void> {
   const res = await api(`/api/users/${id}`, { method: "DELETE" });
+  await json(res);
+}
+
+export async function uploadUserAvatar(id: string, file: File): Promise<AppUser> {
+  const form = new FormData();
+  form.append("avatar", file);
+  const res = await api(`/api/users/${id}/avatar`, { method: "POST", body: form });
+  return json<AppUser>(res);
+}
+
+export async function deleteUserAvatar(id: string): Promise<void> {
+  const res = await api(`/api/users/${id}/avatar`, { method: "DELETE" });
   await json(res);
 }
 

@@ -2,11 +2,14 @@ import { useEffect, useState } from "react";
 import {
   createUser,
   deleteUser,
+  deleteUserAvatar,
   listUsers,
   resetUserPassword,
+  uploadUserAvatar,
   type AppUser,
   type Role,
 } from "../api.ts";
+import { Avatar } from "./Avatar.tsx";
 
 export function UsersAdmin() {
   const [users, setUsers] = useState<AppUser[]>([]);
@@ -18,11 +21,40 @@ export function UsersAdmin() {
   const [role, setRole] = useState<Role>("rep");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
+  // Bumped on every refresh so a just-uploaded photo remounts the <Avatar> and
+  // bypasses the browser's cache of the (unchanged) image URL.
+  const [version, setVersion] = useState(0);
 
   function refresh() {
-    listUsers().then(setUsers).catch((e) => setError(String(e)));
+    listUsers()
+      .then((u) => {
+        setUsers(u);
+        setVersion((v) => v + 1);
+      })
+      .catch((e) => setError(String(e)));
   }
   useEffect(refresh, []);
+
+  async function onPickPhoto(u: AppUser, file: File | undefined) {
+    if (!file) return;
+    setError(null);
+    try {
+      await uploadUserAvatar(u.id, file);
+      refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not upload photo");
+    }
+  }
+
+  async function removePhoto(u: AppUser) {
+    if (!window.confirm(`Remove ${u.name}'s photo?`)) return;
+    try {
+      await deleteUserAvatar(u.id);
+      refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not remove photo");
+    }
+  }
 
   async function add(e: React.FormEvent) {
     e.preventDefault();
@@ -145,6 +177,7 @@ export function UsersAdmin() {
               key={u.id}
               className="flex items-center gap-3 rounded-box bg-base-200 px-4 py-3"
             >
+              <Avatar key={`${u.id}-${version}`} userId={u.id} name={u.name} size={44} />
               <div className="min-w-0">
                 <span className="font-medium">{u.name}</span>
                 <span className="ml-2 text-sm opacity-50">{u.email}</span>
@@ -154,7 +187,24 @@ export function UsersAdmin() {
               >
                 {u.role === "manager" ? "Sales head" : "Salesperson"}
               </span>
-              <div className="ml-auto flex gap-2">
+              <div className="ml-auto flex flex-wrap justify-end gap-2">
+                <label className="btn btn-ghost btn-xs">
+                  {u.hasAvatar ? "Change photo" : "Add photo"}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      void onPickPhoto(u, e.target.files?.[0]);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+                {u.hasAvatar && (
+                  <button onClick={() => void removePhoto(u)} className="btn btn-ghost btn-xs text-error">
+                    Remove photo
+                  </button>
+                )}
                 <button onClick={() => void resetPassword(u)} className="btn btn-ghost btn-xs">
                   Reset password
                 </button>
