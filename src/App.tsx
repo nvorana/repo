@@ -102,8 +102,11 @@ export default function App() {
 
   const isManager = session.role === "manager";
   const showingMine = !isManager || tab === "mine";
-  // A manager's own calls are personal — keep them out of the team views.
-  const teamReviews = reviews.filter((r) => r.repId !== session.id);
+  // The owner's own calls are personal — keep them out of the owner's team views.
+  // Everyone else (reps AND other managers, e.g. Mike) reports to the team as normal.
+  const teamReviews = session.personal
+    ? reviews.filter((r) => r.repId !== session.id)
+    : reviews;
 
   const managerTabs: { id: ManagerTab; label: string; short: string }[] = [
     { id: "team", label: "Team Coaching", short: "Team" },

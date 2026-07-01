@@ -98,6 +98,8 @@ export interface Session {
   name: string;
   email: string;
   role: Role;
+  /** True for the app owner's account — excluded from team reporting. */
+  personal?: boolean;
 }
 
 /** Returns the logged-in session, or null if not logged in. */

@@ -129,7 +129,7 @@ app.post("/api/login", (req, res) => {
   const user = users.verify(email, password);
   if (!user) return res.status(401).json({ error: "Wrong email or password" });
   setSessionCookie(req, res, user.id);
-  res.json({ id: user.id, name: user.name, email: user.email, role: user.role });
+  res.json({ id: user.id, name: user.name, email: user.email, role: user.role, personal: isPersonalAccount(user) });
 });
 
 app.post("/api/logout", (_req, res) => {
@@ -143,7 +143,7 @@ app.get("/api/me", (req, res) => {
   }
   const user = currentUser(req);
   if (!user) return res.status(401).json({ error: "Not logged in" });
-  res.json({ id: user.id, name: user.name, email: user.email, role: user.role });
+  res.json({ id: user.id, name: user.name, email: user.email, role: user.role, personal: isPersonalAccount(user) });
 });
 
 // Everything below requires a logged-in user (open when no accounts exist).
@@ -213,15 +213,26 @@ function repOwns(job: { rep?: string; repId?: string }, user: User | null): bool
   return Boolean(job.rep && job.rep.toLowerCase() === user.name.toLowerCase());
 }
 
-// A call whose owner account is a manager is "personal" to that manager.
-function ownerIsManager(job: { repId?: string }): boolean {
-  return job.repId ? users.getById(job.repId)?.role === "manager" : false;
+// Personal accounts: their calls are excluded from team reporting and kept
+// private to the owner. Defaults to the app owner; override via the
+// PERSONAL_EMAILS env var (comma-separated).
+const PERSONAL_EMAILS = new Set(
+  (process.env.PERSONAL_EMAILS ?? "nvorana@gmail.com")
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean),
+);
+function isPersonalAccount(user: User | null | undefined): boolean {
+  return Boolean(user && PERSONAL_EMAILS.has(user.email.toLowerCase()));
+}
+function ownerIsPersonal(job: { repId?: string }): boolean {
+  return job.repId ? isPersonalAccount(users.getById(job.repId)) : false;
 }
 
-// A manager sees all rep-owned calls plus their OWN personal calls,
-// but never another manager's personal calls.
+// A manager sees all non-personal calls plus their OWN personal calls,
+// but never another user's personal (owner) call.
 function managerCanSee(job: { repId?: string }, user: User | null): boolean {
-  if (!ownerIsManager(job)) return true;
+  if (!ownerIsPersonal(job)) return true;
   return Boolean(user && job.repId === user.id);
 }
 
