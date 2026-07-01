@@ -23,6 +23,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT ?? 8787);
 const DATA_DIR = process.env.DATA_DIR ?? path.join(__dirname, "..", "data", "reviews");
 const AUDIO_DIR = process.env.AUDIO_DIR ?? path.join(__dirname, "..", "data", "audio");
+const AVATAR_DIR = process.env.AVATAR_DIR ?? path.join(DATA_DIR, "..", "avatars");
 const USERS_FILE = process.env.USERS_FILE ?? path.join(DATA_DIR, "..", "users.json");
 const FRAMEWORKS_DIR = path.join(__dirname, "frameworks");
 const MAX_UPLOAD_MB = 250;
@@ -88,6 +89,19 @@ const upload = multer({
   limits: { fileSize: MAX_UPLOAD_MB * 1024 * 1024 },
 });
 
+// Profile photos: small, image-only uploads kept on the volume next to reviews.
+const AVATAR_EXT: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "image/gif": "gif",
+};
+const avatarUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => cb(null, Boolean(AVATAR_EXT[file.mimetype])),
+});
+
 const app = express();
 app.set("trust proxy", 1); // behind Railway/Render's HTTPS proxy
 app.use(express.json());
@@ -115,6 +129,7 @@ app.get("/api/health", (_req, res) => {
     assemblyaiKey: Boolean(process.env.ASSEMBLYAI_API_KEY),
     dataDir: DATA_DIR,
     audioDir: AUDIO_DIR,
+    avatarDir: AVATAR_DIR,
     // True when storage points at a mounted volume path (persists across deploys).
     persistentStorage: DATA_DIR.startsWith("/data"),
     reviewCount: store.list().length,
@@ -197,6 +212,57 @@ app.delete("/api/users/:id", requireManager, (req, res) => {
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : "Could not remove user" });
   }
+});
+
+// --- Profile photos ---------------------------------------------------------
+// Upload/replace and remove are manager-only; the image itself is readable by
+// any logged-in user so it can render in the team reports.
+app.post("/api/users/:id/avatar", requireManager, avatarUpload.single("avatar"), (req, res) => {
+  const id = String(req.params.id);
+  if (!users.getById(id)) return res.status(404).json({ error: "User not found" });
+  if (!req.file) {
+    return res.status(400).json({ error: "Upload a JPG, PNG, WebP or GIF image (max 5 MB)." });
+  }
+  const ext = AVATAR_EXT[req.file.mimetype];
+  try {
+    fs.mkdirSync(AVATAR_DIR, { recursive: true });
+    // Drop any prior photo with a different extension so only one file per user.
+    for (const e of Object.values(AVATAR_EXT)) {
+      const old = path.join(AVATAR_DIR, `${id}.${e}`);
+      if (e !== ext && fs.existsSync(old)) fs.rmSync(old);
+    }
+    fs.writeFileSync(path.join(AVATAR_DIR, `${id}.${ext}`), req.file.buffer);
+    users.setAvatarExt(id, ext);
+    res.json(toPublic(users.getById(id)!));
+  } catch (err) {
+    console.error(`Could not save avatar for ${id}:`, err);
+    res.status(500).json({ error: "Could not save the photo." });
+  }
+});
+
+app.delete("/api/users/:id/avatar", requireManager, (req, res) => {
+  const id = String(req.params.id);
+  const u = users.getById(id);
+  if (!u) return res.status(404).json({ error: "User not found" });
+  if (u.avatarExt) {
+    const file = path.join(AVATAR_DIR, `${id}.${u.avatarExt}`);
+    try {
+      if (fs.existsSync(file)) fs.rmSync(file);
+    } catch (err) {
+      console.error(`Could not delete avatar for ${id}:`, err);
+    }
+  }
+  users.clearAvatar(id);
+  res.json({ ok: true });
+});
+
+app.get("/api/users/:id/avatar", (req, res) => {
+  const u = users.getById(String(req.params.id));
+  if (!u?.avatarExt) return res.status(404).json({ error: "No photo" });
+  const file = path.join(AVATAR_DIR, `${u.id}.${u.avatarExt}`);
+  if (!fs.existsSync(file)) return res.status(404).json({ error: "No photo" });
+  res.set("Cache-Control", "private, max-age=300");
+  res.sendFile(file);
 });
 
 // A report is hidden from reps until the sales head releases it — this is the

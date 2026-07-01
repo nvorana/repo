@@ -12,6 +12,7 @@ export interface User {
   salt: string;
   hash: string;
   createdAt: string;
+  avatarExt?: string; // extension of the stored profile photo, if any (e.g. "jpg")
 }
 
 /** User as exposed to the client — never includes the password material. */
@@ -21,6 +22,7 @@ export interface PublicUser {
   email: string;
   role: Role;
   createdAt: string;
+  hasAvatar: boolean;
 }
 
 function hashPassword(password: string, salt: string): string {
@@ -28,7 +30,14 @@ function hashPassword(password: string, salt: string): string {
 }
 
 export function toPublic(u: User): PublicUser {
-  return { id: u.id, name: u.name, email: u.email, role: u.role, createdAt: u.createdAt };
+  return {
+    id: u.id,
+    name: u.name,
+    email: u.email,
+    role: u.role,
+    createdAt: u.createdAt,
+    hasAvatar: Boolean(u.avatarExt),
+  };
 }
 
 /**
@@ -134,6 +143,20 @@ export class UserStore {
     if (password.length < 4) throw new Error("Password must be at least 4 characters");
     u.salt = crypto.randomBytes(16).toString("hex");
     u.hash = hashPassword(password, u.salt);
+    this.save();
+  }
+
+  setAvatarExt(id: string, ext: string): void {
+    const u = this.getById(id);
+    if (!u) throw new Error("User not found");
+    u.avatarExt = ext;
+    this.save();
+  }
+
+  clearAvatar(id: string): void {
+    const u = this.getById(id);
+    if (!u || !u.avatarExt) return;
+    delete u.avatarExt;
     this.save();
   }
 
