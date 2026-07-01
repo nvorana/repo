@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { listFrameworks, uploadReview, type FrameworkInfo } from "../api.ts";
 
 interface Props {
@@ -8,8 +8,6 @@ interface Props {
 }
 
 export function UploadCard({ onUploaded, fixedRep }: Props) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [frameworks, setFrameworks] = useState<FrameworkInfo[]>([]);
@@ -18,6 +16,8 @@ export function UploadCard({ onUploaded, fixedRep }: Props) {
     () => fixedRep ?? localStorage.getItem("callcoach.rep") ?? "",
   );
   const [client, setClient] = useState<string>("");
+  const [repAudio, setRepAudio] = useState<File | null>(null);
+  const [clientAudio, setClientAudio] = useState<File | null>(null);
   const effectiveRep = fixedRep ?? rep;
 
   useEffect(() => {
@@ -30,39 +30,31 @@ export function UploadCard({ onUploaded, fixedRep }: Props) {
       .catch(console.error);
   }, []);
 
-  async function handleFile(file: File | undefined) {
-    if (!file || busy) return;
-    if (!client.trim()) {
-      setError("Enter the client's name before uploading.");
-      return;
-    }
+  const ready = client.trim().length > 0 && !!repAudio && !!clientAudio;
+
+  async function submit() {
+    if (!ready || busy) return;
     setError(null);
     setBusy(true);
     try {
       if (!fixedRep) localStorage.setItem("callcoach.rep", rep);
-      const { id } = await uploadReview(file, {
-        frameworkId: frameworkId || undefined,
-        rep: effectiveRep.trim() || undefined,
-        client: client.trim(),
-      });
+      const { id } = await uploadReview(
+        { repAudio: repAudio!, clientAudio: clientAudio! },
+        {
+          frameworkId: frameworkId || undefined,
+          rep: effectiveRep.trim() || undefined,
+          client: client.trim(),
+        },
+      );
       onUploaded(id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
       setBusy(false);
-      if (inputRef.current) inputRef.current.value = "";
     }
   }
 
-  const ready = client.trim().length > 0;
-
-  function openPicker() {
-    if (!ready) {
-      setError("Enter the client's name first.");
-      return;
-    }
-    inputRef.current?.click();
-  }
+  const accept = "audio/*,.m4a,.mp3,.wav,.ogg,.webm,.flac,.aac";
 
   return (
     <div className="card bg-base-200">
@@ -111,46 +103,55 @@ export function UploadCard({ onUploaded, fixedRep }: Props) {
           )}
         </div>
 
-        <div
-          role="button"
-          tabIndex={0}
-          aria-disabled={!ready}
-          onClick={openPicker}
-          onKeyDown={(e) => e.key === "Enter" && openPicker()}
-          onDragOver={(e) => {
-            e.preventDefault();
-            if (ready) setDragging(true);
-          }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={(e) => {
-            e.preventDefault();
-            setDragging(false);
-            void handleFile(e.dataTransfer.files[0]);
-          }}
-          className={`cursor-pointer rounded-box border-2 border-dashed p-10 text-center transition-colors ${
-            dragging
-              ? "border-primary bg-primary/10"
-              : ready
-                ? "border-base-content/20 hover:border-base-content/40"
-                : "border-base-content/10 opacity-50"
-          }`}
-        >
-          {busy ? (
-            <span className="loading loading-spinner loading-lg text-primary" />
-          ) : (
-            <>
-              <p className="text-lg font-medium">Drop a call recording here</p>
-              <p className="mt-1 text-sm opacity-60">or click to browse — mp3, m4a, wav, ogg, webm</p>
-            </>
+        <div className="rounded-box border border-info/30 bg-info/5 p-3 text-sm">
+          Upload <span className="font-semibold">each person's own audio file</span> from the call.
+          In Zoom, turn on “Record a separate audio file of each participant.” Separate tracks let us
+          measure exactly who spoke how long.
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="flex flex-col gap-1">
+            <span className="text-sm font-medium">
+              Your recording (the rep) <span className="text-primary">*</span>
+            </span>
+            <input
+              type="file"
+              accept={accept}
+              className="file-input file-input-bordered file-input-sm w-full"
+              onChange={(e) => setRepAudio(e.target.files?.[0] ?? null)}
+            />
+            {repAudio && <span className="truncate text-xs opacity-60">{repAudio.name}</span>}
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-sm font-medium">
+              Client's recording <span className="text-primary">*</span>
+            </span>
+            <input
+              type="file"
+              accept={accept}
+              className="file-input file-input-bordered file-input-sm w-full"
+              onChange={(e) => setClientAudio(e.target.files?.[0] ?? null)}
+            />
+            {clientAudio && <span className="truncate text-xs opacity-60">{clientAudio.name}</span>}
+          </label>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => void submit()}
+            disabled={!ready || busy}
+            className="btn btn-primary btn-sm"
+          >
+            {busy ? <span className="loading loading-spinner loading-sm" /> : "Review call"}
+          </button>
+          {!ready && !busy && (
+            <span className="text-xs opacity-50">
+              Add the client name and both audio files to continue.
+            </span>
           )}
         </div>
-        <input
-          ref={inputRef}
-          type="file"
-          accept="audio/*,.m4a,.mp3,.wav,.ogg,.webm,.flac,.aac"
-          className="hidden"
-          onChange={(e) => void handleFile(e.target.files?.[0])}
-        />
+
         {error && (
           <div className="alert alert-error py-2 text-sm">
             <span>{error}</span>

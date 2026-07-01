@@ -48,6 +48,8 @@ export interface ReviewJob {
   rep?: string;
   client?: string;
   audioFile?: string;
+  repAudioFile?: string;
+  clientAudioFile?: string;
   coach?: CoachFeedback;
   released?: boolean;
   error?: string;
@@ -73,8 +75,8 @@ export async function saveCoachFeedback(
   return json<ReviewJob>(res);
 }
 
-export function audioUrl(id: string): string {
-  return `/api/reviews/${id}/audio`;
+export function audioUrl(id: string, track?: "rep" | "client"): string {
+  return track ? `/api/reviews/${id}/audio?track=${track}` : `/api/reviews/${id}/audio`;
 }
 
 export function userAvatarUrl(id: string): string {
@@ -189,11 +191,12 @@ export function getReview(id: string): Promise<ReviewJob> {
 }
 
 export async function uploadReview(
-  file: File,
+  files: { repAudio: File; clientAudio: File },
   opts: { frameworkId?: string; rep?: string; client: string },
 ): Promise<{ id: string }> {
   const form = new FormData();
-  form.append("audio", file);
+  form.append("repAudio", files.repAudio);
+  form.append("clientAudio", files.clientAudio);
   if (opts.frameworkId) form.append("frameworkId", opts.frameworkId);
   if (opts.rep) form.append("rep", opts.rep);
   form.append("client", opts.client);

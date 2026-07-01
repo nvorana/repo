@@ -942,7 +942,11 @@ function DetailView({
               </div>
             )}
           <CoachPanel job={job} canEdit={canCoach} onUpdated={onUpdated} />
-          <Report result={job.result} reviewId={job.id} />
+          <Report
+            result={job.result}
+            reviewId={job.id}
+            separateTracks={Boolean(job.clientAudioFile)}
+          />
         </div>
       )}
     </div>

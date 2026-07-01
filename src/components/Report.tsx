@@ -22,34 +22,73 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "transcript", label: "Transcript" },
 ];
 
-export function Report({ result, reviewId }: { result: CallReviewResult; reviewId: string }) {
+export function Report({
+  result,
+  reviewId,
+  separateTracks = false,
+}: {
+  result: CallReviewResult;
+  reviewId: string;
+  separateTracks?: boolean;
+}) {
   const { review, metrics } = result;
-  const audioRef = useRef<HTMLAudioElement>(null);
+  const repAudioRef = useRef<HTMLAudioElement>(null);
+  const clientAudioRef = useRef<HTMLAudioElement>(null);
   const [hasAudio, setHasAudio] = useState(true);
   const [tab, setTab] = useState<Tab>("summary");
 
   function seek(seconds: number) {
-    const el = audioRef.current;
-    if (!el) return;
-    el.currentTime = Math.max(0, seconds - 3);
-    void el.play();
-    el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    const at = Math.max(0, seconds - 3);
+    // Separate tracks share the meeting timeline (each is silent when the other
+    // talks), so seeking + playing both together reconstructs the moment.
+    for (const el of [repAudioRef.current, clientAudioRef.current]) {
+      if (!el) continue;
+      el.currentTime = at;
+      void el.play();
+    }
+    repAudioRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }
   const onSeek = hasAudio ? seek : undefined;
 
   return (
     <div className="space-y-5">
       {hasAudio && (
-        <div className="print-hide sticky top-0 z-10 -mx-2 rounded-box bg-base-100/95 p-2 backdrop-blur">
-          <audio
-            ref={audioRef}
-            controls
-            preload="none"
-            src={audioUrl(reviewId)}
-            onError={() => setHasAudio(false)}
-            className="w-full"
-          />
-          <p className="mt-1 px-1 text-xs opacity-50">
+        <div className="print-hide sticky top-0 z-10 -mx-2 space-y-2 rounded-box bg-base-100/95 p-2 backdrop-blur">
+          {separateTracks ? (
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div>
+                <p className="mb-1 text-xs font-medium opacity-60">Your track (rep)</p>
+                <audio
+                  ref={repAudioRef}
+                  controls
+                  preload="none"
+                  src={audioUrl(reviewId, "rep")}
+                  onError={() => setHasAudio(false)}
+                  className="w-full"
+                />
+              </div>
+              <div>
+                <p className="mb-1 text-xs font-medium opacity-60">Client track</p>
+                <audio
+                  ref={clientAudioRef}
+                  controls
+                  preload="none"
+                  src={audioUrl(reviewId, "client")}
+                  className="w-full"
+                />
+              </div>
+            </div>
+          ) : (
+            <audio
+              ref={repAudioRef}
+              controls
+              preload="none"
+              src={audioUrl(reviewId)}
+              onError={() => setHasAudio(false)}
+              className="w-full"
+            />
+          )}
+          <p className="px-1 text-xs opacity-50">
             Tip: click any ▶ timestamp anywhere in the report to hear that exact moment.
           </p>
         </div>
