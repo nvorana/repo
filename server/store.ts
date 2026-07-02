@@ -27,6 +27,8 @@ export interface ReviewJob {
   repId?: string;
   /** Prospect/client on the call, entered at upload time (required in UI). */
   client?: string;
+  /** Date the call actually happened (YYYY-MM-DD), entered at upload. Falls back to createdAt. */
+  callDate?: string;
   /** Stored audio file name (under the audio dir), when retained. Legacy single-file uploads. */
   audioFile?: string;
   /** Stored rep-track audio file name (separate-tracks uploads). */
@@ -61,7 +63,7 @@ export class ReviewStore {
 
   create(
     filename: string,
-    opts: { rep?: string; repId?: string; client?: string } = {},
+    opts: { rep?: string; repId?: string; client?: string; callDate?: string } = {},
   ): ReviewJob {
     const job: ReviewJob = {
       id: crypto.randomUUID(),
@@ -71,6 +73,7 @@ export class ReviewStore {
       ...(opts.rep ? { rep: opts.rep } : {}),
       ...(opts.repId ? { repId: opts.repId } : {}),
       ...(opts.client ? { client: opts.client } : {}),
+      ...(opts.callDate ? { callDate: opts.callDate } : {}),
     };
     this.write(job);
     return job;

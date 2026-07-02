@@ -435,7 +435,7 @@ function ReviewRow({
         </div>
       </div>
       <span className="shrink-0 text-xs opacity-50">
-        {new Date(r.createdAt).toLocaleDateString()}
+        {new Date(r.callDate ?? r.createdAt).toLocaleDateString()}
       </span>
     </button>
   );
@@ -495,7 +495,7 @@ function ReviewBrowser({
   // shown is already newest-first; bucket into date groups in that order.
   const groups: { label: string; items: ReviewSummary[] }[] = [];
   for (const r of shown) {
-    const { label } = dateBucket(r.createdAt);
+    const { label } = dateBucket(r.callDate ?? r.createdAt);
     const last = groups[groups.length - 1];
     if (last && last.label === label) last.items.push(r);
     else groups.push({ label, items: [r] });
@@ -605,6 +605,9 @@ function computeRepStats(reviews: ReviewSummary[]): RepStats[] {
       byRep.set(r.rep, list);
     }
   }
+  // Order each rep's calls newest-first by when the call happened (not upload time).
+  const dateOf = (r: ReviewSummary) => new Date(r.callDate ?? r.createdAt).getTime();
+  for (const list of byRep.values()) list.sort((a, b) => dateOf(b) - dateOf(a));
   const priority = (s: { avgScore: number; lastScore: number; calls: number }) => {
     const trend = s.calls > 1 ? s.lastScore - s.avgScore : 0;
     if (trend < -0.2) return 0; // slipping

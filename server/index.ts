@@ -327,9 +327,10 @@ app.get("/api/reviews", (req, res) => {
   // withheld from reps on their own calls the coach hasn't released yet.
   res.json(
     visible.map((job) => {
-      const { id, filename, createdAt, status, rep, repId, client, error, result, coach } = job;
+      const { id, filename, createdAt, callDate, status, rep, repId, client, error, result, coach } =
+        job;
       const released = Boolean(coach?.released);
-      const base = { id, filename, createdAt, status, rep, repId, client, error, released };
+      const base = { id, filename, createdAt, callDate, status, rep, repId, client, error, released };
       if (asRep && !repReleased(job)) {
         return { ...base, coachReviewed: coach?.reviewed ?? false };
       }
@@ -472,7 +473,10 @@ app.post("/api/reviews", upload.fields([{ name: "repAudio", maxCount: 1 }, { nam
   if (!client) {
     return res.status(400).json({ error: "Client name is required." });
   }
-  const job = store.create(repFile.originalname, { rep, repId, client });
+  // Optional date the call actually happened (YYYY-MM-DD); trends bucket by this.
+  const rawDate = typeof req.body.callDate === "string" ? req.body.callDate.trim() : "";
+  const callDate = /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : undefined;
+  const job = store.create(repFile.originalname, { rep, repId, client, callDate });
 
   // Persist both tracks so coaches can replay each side from the report.
   try {

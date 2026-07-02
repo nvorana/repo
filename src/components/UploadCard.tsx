@@ -7,6 +7,14 @@ interface Props {
   fixedRep?: string;
 }
 
+/** Today's date as YYYY-MM-DD in the user's local timezone. */
+function todayLocal(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate(),
+  ).padStart(2, "0")}`;
+}
+
 export function UploadCard({ onUploaded, fixedRep }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -16,6 +24,7 @@ export function UploadCard({ onUploaded, fixedRep }: Props) {
     () => fixedRep ?? localStorage.getItem("callcoach.rep") ?? "",
   );
   const [client, setClient] = useState<string>("");
+  const [callDate, setCallDate] = useState<string>(() => todayLocal());
   const [repAudio, setRepAudio] = useState<File | null>(null);
   const [clientAudio, setClientAudio] = useState<File | null>(null);
   const effectiveRep = fixedRep ?? rep;
@@ -44,6 +53,7 @@ export function UploadCard({ onUploaded, fixedRep }: Props) {
           frameworkId: frameworkId || undefined,
           rep: effectiveRep.trim() || undefined,
           client: client.trim(),
+          callDate: callDate || undefined,
         },
       );
       onUploaded(id);
@@ -82,6 +92,16 @@ export function UploadCard({ onUploaded, fixedRep }: Props) {
               onChange={(e) => setClient(e.target.value)}
               placeholder="Who was on the call? e.g. Jenny Reyes"
               className="input input-bordered input-sm w-full"
+            />
+          </label>
+          <label className="flex flex-col">
+            <span className="label-text mb-1 text-sm opacity-70">When did this call happen?</span>
+            <input
+              type="date"
+              value={callDate}
+              max={todayLocal()}
+              onChange={(e) => setCallDate(e.target.value)}
+              className="input input-bordered input-sm"
             />
           </label>
           {frameworks.length > 1 && (

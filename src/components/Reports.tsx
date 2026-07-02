@@ -58,7 +58,7 @@ export function Reports({ reviews }: { reviews: ReviewSummary[] }) {
   const scored: Scored[] = reviews
     .filter((r) => r.status === "completed" && r.overallScore != null)
     .map((r) => ({
-      date: new Date(r.createdAt).getTime(),
+      date: new Date(r.callDate ?? r.createdAt).getTime(),
       score: r.overallScore!,
       repKey: r.repId ?? r.rep ?? "—",
       repName: r.rep ?? "—",
