@@ -8,6 +8,7 @@ import {
   AssemblyAIProvider,
   defaultFramework,
   frameworkFromMarkdown,
+  reviewCall,
   reviewCallFromTracks,
   type SalesFramework,
 } from "../core/index.ts";
@@ -426,14 +427,16 @@ app.get("/api/reviews/:id", (req, res) => {
   res.json({ ...job, released });
 });
 
-app.post("/api/reviews", upload.fields([{ name: "repAudio", maxCount: 1 }, { name: "clientAudio", maxCount: 1 }]), (req, res) => {
+app.post("/api/reviews", upload.fields([{ name: "audio", maxCount: 1 }, { name: "repAudio", maxCount: 1 }, { name: "clientAudio", maxCount: 1 }]), (req, res) => {
   const files = req.files as Record<string, Express.Multer.File[]> | undefined;
   const repFile = files?.repAudio?.[0];
   const clientFile = files?.clientAudio?.[0];
-  if (!repFile || !clientFile) {
-    return res
-      .status(400)
-      .json({ error: "Upload both audio files: your recording and the client's recording." });
+  const singleFile = files?.audio?.[0];
+  const twoTracks = Boolean(repFile && clientFile);
+  if (!twoTracks && !singleFile) {
+    return res.status(400).json({
+      error: "Upload a recording — either one combined file, or both participants' separate files.",
+    });
   }
   if (!process.env.ASSEMBLYAI_API_KEY || !process.env.ANTHROPIC_API_KEY) {
     return res.status(503).json({
@@ -476,18 +479,30 @@ app.post("/api/reviews", upload.fields([{ name: "repAudio", maxCount: 1 }, { nam
   // Optional date the call actually happened (YYYY-MM-DD); trends bucket by this.
   const rawDate = typeof req.body.callDate === "string" ? req.body.callDate.trim() : "";
   const callDate = /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : undefined;
-  const job = store.create(repFile.originalname, { rep, repId, client, callDate });
+  const job = store.create((twoTracks ? repFile! : singleFile!).originalname, {
+    rep,
+    repId,
+    client,
+    callDate,
+  });
 
-  // Persist both tracks so coaches can replay each side from the report.
+  // Persist audio so coaches can replay moments from the report.
   try {
     fs.mkdirSync(AUDIO_DIR, { recursive: true });
-    const repExt = path.extname(repFile.originalname).slice(0, 10) || ".audio";
-    const clientExt = path.extname(clientFile.originalname).slice(0, 10) || ".audio";
-    const repAudioFile = `${job.id}-rep${repExt}`;
-    const clientAudioFile = `${job.id}-client${clientExt}`;
-    fs.writeFileSync(path.join(AUDIO_DIR, repAudioFile), repFile.buffer);
-    fs.writeFileSync(path.join(AUDIO_DIR, clientAudioFile), clientFile.buffer);
-    store.update(job.id, { repAudioFile, clientAudioFile });
+    if (twoTracks) {
+      const repExt = path.extname(repFile!.originalname).slice(0, 10) || ".audio";
+      const clientExt = path.extname(clientFile!.originalname).slice(0, 10) || ".audio";
+      const repAudioFile = `${job.id}-rep${repExt}`;
+      const clientAudioFile = `${job.id}-client${clientExt}`;
+      fs.writeFileSync(path.join(AUDIO_DIR, repAudioFile), repFile!.buffer);
+      fs.writeFileSync(path.join(AUDIO_DIR, clientAudioFile), clientFile!.buffer);
+      store.update(job.id, { repAudioFile, clientAudioFile });
+    } else {
+      const ext = path.extname(singleFile!.originalname).slice(0, 10) || ".audio";
+      const audioFile = `${job.id}${ext}`;
+      fs.writeFileSync(path.join(AUDIO_DIR, audioFile), singleFile!.buffer);
+      store.update(job.id, { audioFile });
+    }
   } catch (err) {
     console.error(`Could not persist audio for ${job.id}:`, err);
   }
@@ -495,10 +510,41 @@ app.post("/api/reviews", upload.fields([{ name: "repAudio", maxCount: 1 }, { nam
   res.status(202).json({ id: job.id, status: job.status });
 
   // Fire-and-forget; clients poll GET /api/reviews/:id for progress.
-  void runReview(job.id, repFile, clientFile, framework);
+  if (twoTracks) {
+    void runReviewFromTracks(job.id, repFile!, clientFile!, framework);
+  } else {
+    void runReviewSingle(job.id, singleFile!, framework);
+  }
 });
 
-async function runReview(
+// Single combined file: uses diarization + AI speaker-ID (talk ratio is an
+// estimate — the UI flags it). Kept so reps not yet recording separate tracks
+// aren't blocked.
+async function runReviewSingle(
+  jobId: string,
+  file: { buffer: Buffer; originalname: string; mimetype: string },
+  framework: SalesFramework,
+) {
+  try {
+    const result = await reviewCall(
+      { data: file.buffer, filename: file.originalname, mimeType: file.mimetype },
+      {
+        transcriber: new AssemblyAIProvider(process.env.ASSEMBLYAI_API_KEY!),
+        framework,
+        onStage: (stage) => store.update(jobId, { status: stage }),
+      },
+    );
+    store.update(jobId, { status: "completed", result });
+  } catch (err) {
+    console.error(`Review ${jobId} failed:`, err);
+    store.update(jobId, {
+      status: "failed",
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+async function runReviewFromTracks(
   jobId: string,
   repFile: { buffer: Buffer; originalname: string; mimetype: string },
   clientFile: { buffer: Buffer; originalname: string; mimetype: string },
@@ -535,15 +581,45 @@ async function runReview(
 // Railway/Render service hosts everything. In dev, Vite serves the UI instead.
 const DIST_DIR = path.join(__dirname, "..", "dist");
 if (fs.existsSync(DIST_DIR)) {
-  app.use(express.static(DIST_DIR));
+  // Assets are content-hashed (safe to cache forever); index.html must always
+  // revalidate so a new deploy is picked up instead of a stale cached shell.
+  app.use(
+    express.static(DIST_DIR, {
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith("index.html")) res.setHeader("Cache-Control", "no-cache");
+      },
+    }),
+  );
   // SPA fallback: any non-API GET serves the app shell.
   app.use((req, res, next) => {
     if (req.method === "GET" && !req.path.startsWith("/api/")) {
+      res.setHeader("Cache-Control", "no-cache");
       return res.sendFile(path.join(DIST_DIR, "index.html"));
     }
     next();
   });
 }
+
+// Turn upload/parse failures into a clear message instead of a bare 500.
+// (e.g. an old cached client posting an unexpected field, or an oversized file.)
+app.use(
+  (
+    err: unknown,
+    _req: express.Request,
+    res: express.Response,
+    _next: express.NextFunction,
+  ) => {
+    const e = err as { code?: string; message?: string };
+    if (e?.code === "LIMIT_UNEXPECTED_FILE" || e?.code === "LIMIT_FILE_SIZE") {
+      return res
+        .status(400)
+        .json({ error: "Couldn't read the upload. Refresh the page (Ctrl+Shift+R) and try again." });
+    }
+    console.error("Unhandled request error:", err);
+    if (res.headersSent) return;
+    res.status(500).json({ error: "Something went wrong handling that request. Please try again." });
+  },
+);
 
 app.listen(PORT, () => {
   console.log(`Sales call review API listening on http://localhost:${PORT}`);

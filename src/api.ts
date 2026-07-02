@@ -193,12 +193,13 @@ export function getReview(id: string): Promise<ReviewJob> {
 }
 
 export async function uploadReview(
-  files: { repAudio: File; clientAudio: File },
+  files: { audio?: File; repAudio?: File; clientAudio?: File },
   opts: { frameworkId?: string; rep?: string; client: string; callDate?: string },
 ): Promise<{ id: string }> {
   const form = new FormData();
-  form.append("repAudio", files.repAudio);
-  form.append("clientAudio", files.clientAudio);
+  if (files.audio) form.append("audio", files.audio);
+  if (files.repAudio) form.append("repAudio", files.repAudio);
+  if (files.clientAudio) form.append("clientAudio", files.clientAudio);
   if (opts.frameworkId) form.append("frameworkId", opts.frameworkId);
   if (opts.rep) form.append("rep", opts.rep);
   form.append("client", opts.client);

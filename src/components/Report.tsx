@@ -122,6 +122,13 @@ export function Report({
         <Objections objections={review.objections} onSeek={onSeek} />
       </Pane>
       <Pane show={tab === "delivery"}>
+        {!separateTracks && (
+          <div className="mb-4 rounded-box border border-warning/30 bg-warning/10 p-3 text-sm">
+            <span className="font-semibold text-warning">Talk-time % is an estimate.</span> This call
+            was a single combined recording, so who-spoke-when was inferred and the ratio may be off.
+            For an exact figure, upload each person's separate audio file.
+          </div>
+        )}
         <MetricsStrip metrics={metrics} />
         <div className="mt-5">
           <Delivery review={review} />
