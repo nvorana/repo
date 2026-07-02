@@ -134,22 +134,33 @@ export function UploadCard({ onUploaded, fixedRep }: Props) {
           )}
         </div>
 
-        {/* Recording type */}
-        <div role="tablist" className="tabs tabs-box w-fit">
-          <button
-            role="tab"
-            className={`tab ${mode === "single" ? "tab-active" : ""}`}
-            onClick={() => pickMode("single")}
-          >
-            One recording
-          </button>
-          <button
-            role="tab"
-            className={`tab ${mode === "separate" ? "tab-active" : ""}`}
-            onClick={() => pickMode("separate")}
-          >
-            Separate files (most accurate)
-          </button>
+        {/* Recording type — advisors may have one combined file OR two separate ones */}
+        <div>
+          <span className="label-text mb-1 block text-sm font-medium">
+            How did you record this call? <span className="text-primary">*</span>
+          </span>
+          <div role="tablist" className="tabs tabs-box w-fit">
+            <button
+              role="tab"
+              className={`tab ${mode === "single" ? "tab-active" : ""}`}
+              onClick={() => pickMode("single")}
+            >
+              One recording
+            </button>
+            <button
+              role="tab"
+              className={`tab ${mode === "separate" ? "tab-active" : ""}`}
+              onClick={() => pickMode("separate")}
+            >
+              Two files — one per person
+            </button>
+          </div>
+          <p className="mt-1.5 text-xs opacity-60">
+            Both work — pick whichever you have. <span className="font-medium">One recording</span> = a
+            single combined file of the whole call. <span className="font-medium">Two files</span> = each
+            person's own audio (most accurate talk-time). Still on one combined recording? Choose “One
+            recording.”
+          </p>
         </div>
 
         {mode === "single" ? (
