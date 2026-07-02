@@ -135,32 +135,61 @@ export function UploadCard({ onUploaded, fixedRep }: Props) {
         </div>
 
         {/* Recording type — advisors may have one combined file OR two separate ones */}
-        <div>
-          <span className="label-text mb-1 block text-sm font-medium">
+        <div role="radiogroup" aria-label="How did you record this call?">
+          <span className="label-text mb-2 block text-sm font-medium">
             How did you record this call? <span className="text-primary">*</span>
+            <span className="ml-2 font-normal opacity-50">Both work — pick whichever you have.</span>
           </span>
-          <div role="tablist" className="tabs tabs-box w-fit">
-            <button
-              role="tab"
-              className={`tab ${mode === "single" ? "tab-active" : ""}`}
-              onClick={() => pickMode("single")}
-            >
-              One recording
-            </button>
-            <button
-              role="tab"
-              className={`tab ${mode === "separate" ? "tab-active" : ""}`}
-              onClick={() => pickMode("separate")}
-            >
-              Two files — one per person
-            </button>
+          <div className="grid gap-3 sm:max-w-2xl sm:grid-cols-2">
+            {(
+              [
+                {
+                  id: "single",
+                  title: "One recording",
+                  desc: "A single combined file of the whole call.",
+                },
+                {
+                  id: "separate",
+                  title: "Two files — one per person",
+                  desc: "Each person's own audio file.",
+                  badge: "Most accurate",
+                },
+              ] as const
+            ).map((opt) => {
+              const active = mode === opt.id;
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  onClick={() => pickMode(opt.id)}
+                  className={`flex items-start gap-3 rounded-box border-2 p-3 text-left transition-colors ${
+                    active
+                      ? "border-primary bg-primary/10"
+                      : "border-base-300 hover:border-base-content/30"
+                  }`}
+                >
+                  <span
+                    className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${
+                      active ? "border-primary" : "border-base-content/30"
+                    }`}
+                  >
+                    {active && <span className="h-2.5 w-2.5 rounded-full bg-primary" />}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="flex items-center gap-2 font-semibold">
+                      {opt.title}
+                      {"badge" in opt && opt.badge && (
+                        <span className="badge badge-success badge-sm">{opt.badge}</span>
+                      )}
+                    </span>
+                    <span className="mt-0.5 block text-xs opacity-60">{opt.desc}</span>
+                  </span>
+                </button>
+              );
+            })}
           </div>
-          <p className="mt-1.5 text-xs opacity-60">
-            Both work — pick whichever you have. <span className="font-medium">One recording</span> = a
-            single combined file of the whole call. <span className="font-medium">Two files</span> = each
-            person's own audio (most accurate talk-time). Still on one combined recording? Choose “One
-            recording.”
-          </p>
         </div>
 
         {mode === "single" ? (
@@ -169,7 +198,7 @@ export function UploadCard({ onUploaded, fixedRep }: Props) {
               One combined recording works, but the <span className="font-semibold">talk-time %</span> is
               estimated (the app has to guess who's speaking) and may be off. For an exact ratio, record
               each person separately — in Zoom, turn on “Record a separate audio file of each
-              participant” — then switch to <span className="font-semibold">Separate files</span>.
+              participant” — then choose <span className="font-semibold">Two files</span> above.
             </div>
             <label className="flex flex-col gap-1">
               <span className="text-sm font-medium">
