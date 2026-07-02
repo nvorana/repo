@@ -178,13 +178,11 @@ export function UploadCard({ onUploaded, fixedRep }: Props) {
                     {active && <span className="h-2.5 w-2.5 rounded-full bg-primary" />}
                   </span>
                   <span className="min-w-0">
-                    <span className="flex items-center gap-2 font-semibold">
-                      {opt.title}
-                      {"badge" in opt && opt.badge && (
-                        <span className="badge badge-success badge-sm">{opt.badge}</span>
-                      )}
-                    </span>
+                    <span className="block font-semibold">{opt.title}</span>
                     <span className="mt-0.5 block text-xs opacity-60">{opt.desc}</span>
+                    {"badge" in opt && opt.badge && (
+                      <span className="badge badge-success badge-sm mt-1.5">{opt.badge}</span>
+                    )}
                   </span>
                 </button>
               );
