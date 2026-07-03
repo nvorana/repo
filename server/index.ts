@@ -280,6 +280,12 @@ function repOwns(job: { rep?: string; repId?: string }, user: User | null): bool
   return Boolean(job.rep && job.rep.toLowerCase() === user.name.toLowerCase());
 }
 
+// Derived, never stored: a review analyzed from one mixed audio file has
+// guessed speaker attribution, so its numbers are lower-confidence.
+function isMixedAudio(job: { repAudioFile?: string; clientAudioFile?: string }): boolean {
+  return !(job.repAudioFile && job.clientAudioFile);
+}
+
 // Personal accounts: their calls are excluded from team reporting and kept
 // private to the owner. Defaults to the app owner; override via the
 // PERSONAL_EMAILS env var (comma-separated).
@@ -331,7 +337,10 @@ app.get("/api/reviews", (req, res) => {
       const { id, filename, createdAt, callDate, status, rep, repId, client, error, result, coach } =
         job;
       const released = Boolean(coach?.released);
-      const base = { id, filename, createdAt, callDate, status, rep, repId, client, error, released };
+      const base = {
+        id, filename, createdAt, callDate, status, rep, repId, client, error, released,
+        mixedAudio: isMixedAudio(job),
+      };
       if (asRep && !repReleased(job)) {
         return { ...base, coachReviewed: coach?.reviewed ?? false };
       }
@@ -419,12 +428,12 @@ app.get("/api/reviews/:id", (req, res) => {
       const { result: _r, coach: _c, ...rest } = job;
       void _r;
       void _c;
-      return res.json({ ...rest, released });
+      return res.json({ ...rest, released, mixedAudio: isMixedAudio(job) });
     }
   } else if (!managerCanSee(job, user)) {
     return res.status(404).json({ error: "Review not found" });
   }
-  res.json({ ...job, released });
+  res.json({ ...job, released, mixedAudio: isMixedAudio(job) });
 });
 
 app.post("/api/reviews", upload.fields([{ name: "audio", maxCount: 1 }, { name: "repAudio", maxCount: 1 }, { name: "clientAudio", maxCount: 1 }]), (req, res) => {
