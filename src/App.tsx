@@ -1011,7 +1011,9 @@ function DetailView({
             {canCoach && (
               <button
                 onClick={() => {
-                  void reanalyzeReview(job.id).then(refresh).catch(() => {});
+                  void reanalyzeReview(job.id)
+                    .then(refresh)
+                    .catch((err) => console.error("Re-analyze failed:", err));
                 }}
                 className="print-hide btn btn-outline btn-sm"
                 title="Re-run the AI analysis on this call's transcript with the current scoring engine"
