@@ -39,6 +39,8 @@ export interface ReviewSummary {
   overallScore?: number;
   summary?: string;
   scorecard?: ScorecardScore[];
+  /** True when the review was analyzed from one mixed file (guessed speakers). */
+  mixedAudio?: boolean;
 }
 
 export interface ReviewJob {
@@ -54,6 +56,8 @@ export interface ReviewJob {
   clientAudioFile?: string;
   coach?: CoachFeedback;
   released?: boolean;
+  /** True when the review was analyzed from one mixed file (guessed speakers). */
+  mixedAudio?: boolean;
   error?: string;
   result?: CallReviewResult;
 }
