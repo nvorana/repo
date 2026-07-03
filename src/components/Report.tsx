@@ -55,7 +55,7 @@ export function Report({
   return (
     <div className="space-y-5">
       {mixedAudio && (
-        <div role="alert" className="alert alert-warning text-sm">
+        <div className="alert alert-warning text-sm">
           <span>
             <strong>Mixed audio recording</strong> — speaker attribution may be inaccurate. Scores
             from this call are excluded from progress trends. For exact numbers, upload each
