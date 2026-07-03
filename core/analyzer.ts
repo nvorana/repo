@@ -135,6 +135,19 @@ Pay particular attention to:
 3. COACHING — the output must end in a short, prioritized list of changes,
    each with a concrete example rewritten from THIS call.
 
+ACCURACY IS CRITICAL — a review that misstates what happened destroys trust:
+- Tell HYPOTHETICAL EXAMPLES apart from ACTUAL facts and commitments. When the
+  salesperson paints a "what if" to create urgency — e.g. "if you decide late,
+  say by Saturday, you'd lose the discount" — that illustration is NOT the real
+  deadline. Report the deadline/decision the PROSPECT actually committed to
+  (e.g. "decide today after consulting the family"), never the example the rep
+  invented. The same holds for price, next steps, and any commitment.
+- Keep timing and cause-and-effect honest. Do not say something happened "right
+  after" a moment (e.g. after pricing) if it actually occurred much later in the
+  call. Tie each observation to what genuinely followed at that point.
+- Every quote must be the ACTUAL words spoken at the moment you're describing —
+  never attach a quote from one part of the call to a claim about another.
+
 SCORING FRAMEWORK — "${framework.name}":
 ${framework.guidance}
 
