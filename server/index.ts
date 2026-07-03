@@ -267,10 +267,12 @@ app.get("/api/users/:id/avatar", (req, res) => {
   res.sendFile(file);
 });
 
-// A report is hidden from reps until the sales head releases it — this is the
-// accountability gate: reps only see their report after the 1:1 feedback.
-function repReleased(job: { status: string; coach?: { released?: boolean } }): boolean {
-  return job.status !== "completed" || Boolean(job.coach?.released);
+// A job that carries a stored report is only visible to its rep once the
+// coach releases it — regardless of status. (Re-analysis flips status back
+// to "analyzing" while the previous report stays on the job; the old
+// status-based shortcut leaked unreleased reports during that window.)
+function repReleased(job: { coach?: { released?: boolean }; result?: unknown }): boolean {
+  return !job.result || Boolean(job.coach?.released);
 }
 
 // Reps can only ever touch their own calls (server-enforced). Match on the
@@ -646,19 +648,23 @@ async function drainReanalyzeQueue() {
 }
 
 async function runReanalysis(jobId: string) {
-  const job = store.get(jobId);
-  if (!job || job.status !== "completed" || !job.result) return;
-  const frameworks = loadFrameworks();
-  const framework =
-    frameworks.get(job.result.frameworkId) ?? frameworks.get(pickDefaultFrameworkId(frameworks))!;
-  store.update(jobId, { status: "analyzing" });
   try {
+    const job = store.get(jobId);
+    if (!job || job.status !== "completed" || !job.result) return;
+    const frameworks = loadFrameworks();
+    const framework =
+      frameworks.get(job.result.frameworkId) ?? frameworks.get(pickDefaultFrameworkId(frameworks))!;
+    store.update(jobId, { status: "analyzing" });
     const result = await reanalyzeCall(job.result, { framework });
     store.update(jobId, { status: "completed", result, reanalyzedAt: new Date().toISOString() });
   } catch (err) {
     // Never lose the existing report — restore it and move on.
     console.error(`Re-analysis of ${jobId} failed; keeping the previous report:`, err);
-    store.update(jobId, { status: "completed" });
+    try {
+      store.update(jobId, { status: "completed" });
+    } catch {
+      // Job vanished mid-flight (deleted) — nothing to restore.
+    }
   }
 }
 
