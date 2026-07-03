@@ -61,6 +61,17 @@ function pickDefaultFrameworkId(frameworks: Map<string, SalesFramework>): string
 // --- App -------------------------------------------------------------------
 
 const store = new ReviewStore(DATA_DIR);
+
+// Recover jobs stranded by a restart mid-re-analysis: only re-analysis flips
+// an in-progress status onto a job that already has a stored report, so any
+// such job can safely go back to completed — its previous report is intact.
+for (const job of store.list()) {
+  if (job.status !== "completed" && job.status !== "failed" && job.result) {
+    console.warn(`Recovering review ${job.id} stranded in "${job.status}" by a restart.`);
+    store.update(job.id, { status: "completed" });
+  }
+}
+
 const users = new UserStore(USERS_FILE);
 
 // Ensure an admin login from env: whenever MANAGER_EMAIL + MANAGER_PASSWORD are
