@@ -192,6 +192,7 @@ export default function App() {
             myName={session.name}
             myId={session.id}
             canReanalyze={isManager}
+            onReanalyzeQueued={refreshList}
             onUploaded={(id) => {
               refreshList();
               setSelectedId(id);
@@ -270,7 +271,14 @@ function LoginScreen({ onLogin }: { onLogin: (s: Session) => void }) {
 
 // --- Rep hero: "My Coaching" ------------------------------------------------
 
-function ReanalyzeAllButton({ count }: { count: number }) {
+function ReanalyzeAllButton({
+  count,
+  onQueued,
+}: {
+  count: number;
+  /** Called once the jobs are queued, so the caller can refetch the list. */
+  onQueued?: () => void;
+}) {
   const [state, setState] = useState<"idle" | "working" | "done" | "error">("idle");
   const [queued, setQueued] = useState(0);
   if (count === 0) return null;
@@ -291,6 +299,7 @@ function ReanalyzeAllButton({ count }: { count: number }) {
             .then((r) => {
               setQueued(r.queued);
               setState("done");
+              onQueued?.();
             })
             .catch(() => setState("error"));
         }}
@@ -309,6 +318,7 @@ function RepHome({
   onUploaded,
   onSelect,
   canReanalyze = false,
+  onReanalyzeQueued,
 }: {
   reviews: ReviewSummary[];
   myName: string;
@@ -317,6 +327,8 @@ function RepHome({
   onSelect: (id: string) => void;
   /** Managers get the bulk re-analyze button on their own calls. */
   canReanalyze?: boolean;
+  /** Called after bulk re-analysis is queued, so the list refetch/poll kicks in. */
+  onReanalyzeQueued?: () => void;
 }) {
   const mine = reviews.filter((r) => (r.repId ? r.repId === myId : r.rep === myName));
   const stats = computeRepStats(mine)[0];
@@ -379,7 +391,10 @@ function RepHome({
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-lg font-semibold">Your calls</h2>
           {canReanalyze && (
-            <ReanalyzeAllButton count={mine.filter((r) => r.status === "completed").length} />
+            <ReanalyzeAllButton
+              count={mine.filter((r) => r.status === "completed").length}
+              onQueued={onReanalyzeQueued}
+            />
           )}
         </div>
         <ReviewBrowser reviews={mine} onSelect={onSelect} showRep={false} statusFilter />
