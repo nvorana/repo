@@ -1,6 +1,7 @@
 import type { AudioInput, TranscriptionProvider } from "./transcription/provider.ts";
 import { CallAnalyzer, type AnalyzerOptions } from "./analyzer.ts";
 import { computeDeliveryMetrics } from "./metrics.ts";
+import { anchorReviewTimestamps } from "./anchor.ts";
 import { defaultFramework } from "./frameworks/default.ts";
 import type { SalesFramework } from "./frameworks/types.ts";
 import type {
@@ -44,7 +45,10 @@ export async function reviewCall(
 
   options.onStage?.("analyzing");
   const metrics = computeDeliveryMetrics(transcript);
-  const review = await analyzer.analyze(transcript, metrics, framework);
+  const review = anchorReviewTimestamps(
+    await analyzer.analyze(transcript, metrics, framework),
+    transcript,
+  );
 
   return { review, metrics, transcript, frameworkId: framework.id };
 }
@@ -113,6 +117,9 @@ export async function reviewCallFromTracks(
 
   options.onStage?.("analyzing");
   const metrics = computeDeliveryMetrics(transcript);
-  const review = await analyzer.analyze(transcript, metrics, framework);
+  const review = anchorReviewTimestamps(
+    await analyzer.analyze(transcript, metrics, framework),
+    transcript,
+  );
   return { review, metrics, transcript, frameworkId: framework.id };
 }
