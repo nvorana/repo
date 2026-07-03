@@ -19,5 +19,10 @@ export default defineConfig([
       ecmaVersion: 2020,
       globals: globals.browser,
     },
+    rules: {
+      // The codebase marks intentionally-unused params with a _ prefix
+      // (e.g. Express error-middleware's required 4-arg signature).
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+    },
   },
 ])
