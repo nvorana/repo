@@ -9,8 +9,8 @@
  *     framework: myFramework, // optional — defaults to general best practices
  *   });
  */
-export { reviewCall, reviewCallFromTracks, mergeTracks } from "./pipeline.ts";
-export type { ReviewPipelineOptions, ReviewStage, CallTracks } from "./pipeline.ts";
+export { reviewCall, reviewCallFromTracks, reanalyzeCall, mergeTracks } from "./pipeline.ts";
+export type { ReviewPipelineOptions, ReanalyzeOptions, ReviewStage, CallTracks } from "./pipeline.ts";
 
 export { CallAnalyzer } from "./analyzer.ts";
 export type { AnalyzerOptions } from "./analyzer.ts";

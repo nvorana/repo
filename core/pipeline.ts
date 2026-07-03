@@ -67,6 +67,35 @@ export async function reviewCall(
   return { review, metrics, transcript, frameworkId: framework.id, verification };
 }
 
+export interface ReanalyzeOptions {
+  framework?: SalesFramework;
+  analyzer?: AnalyzerOptions;
+}
+
+/**
+ * Re-runs the analysis stage on an already-transcribed call: fresh metrics,
+ * fresh review, anchored timestamps, quote verification. No transcriber —
+ * the stored transcript is reused, so this costs one model call.
+ */
+export async function reanalyzeCall(
+  previous: CallReviewResult,
+  options: ReanalyzeOptions = {},
+): Promise<CallReviewResult> {
+  const framework = options.framework ?? defaultFramework;
+  const analyzer = new CallAnalyzer(options.analyzer);
+  const transcript = previous.transcript;
+  if (transcript.utterances.length === 0) {
+    throw new Error("Stored transcript has no utterances — cannot re-analyze.");
+  }
+  const metrics = computeDeliveryMetrics(transcript);
+  const review = anchorReviewTimestamps(
+    await analyzer.analyze(transcript, metrics, framework),
+    transcript,
+  );
+  const verification = safeVerify(review, transcript);
+  return { review, metrics, transcript, frameworkId: framework.id, verification };
+}
+
 export interface CallTracks {
   repAudio: AudioInput;
   clientAudio: AudioInput;
