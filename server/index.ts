@@ -8,6 +8,7 @@ import {
   AssemblyAIProvider,
   defaultFramework,
   frameworkFromMarkdown,
+  reanalyzeCall,
   reviewCall,
   reviewCallFromTracks,
   type SalesFramework,
@@ -436,6 +437,37 @@ app.get("/api/reviews/:id", (req, res) => {
   res.json({ ...job, released, mixedAudio: isMixedAudio(job) });
 });
 
+app.post("/api/reviews/:id/reanalyze", requireManager, (req, res) => {
+  const job = store.get(String(req.params.id));
+  if (!job || !managerCanSee(job, currentUser(req))) {
+    return res.status(404).json({ error: "Review not found" });
+  }
+  if (job.status !== "completed" || !job.result) {
+    return res.status(409).json({ error: "Only completed reviews can be re-analyzed." });
+  }
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return res.status(503).json({ error: "Server is missing ANTHROPIC_API_KEY — see .env.example." });
+  }
+  if (!enqueueReanalysis(job.id)) {
+    return res.status(409).json({ error: "This review is already being re-analyzed." });
+  }
+  res.status(202).json({ ok: true });
+});
+
+app.post("/api/reanalyze/mine", requireManager, (req, res) => {
+  const user = currentUser(req);
+  if (!user) return res.status(401).json({ error: "Not logged in" });
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return res.status(503).json({ error: "Server is missing ANTHROPIC_API_KEY — see .env.example." });
+  }
+  const own = store
+    .list()
+    .filter((j) => j.repId === user.id && j.status === "completed" && j.result);
+  let queued = 0;
+  for (const j of own) if (enqueueReanalysis(j.id)) queued++;
+  res.status(202).json({ queued });
+});
+
 app.post("/api/reviews", upload.fields([{ name: "audio", maxCount: 1 }, { name: "repAudio", maxCount: 1 }, { name: "clientAudio", maxCount: 1 }]), (req, res) => {
   const files = req.files as Record<string, Express.Multer.File[]> | undefined;
   const repFile = files?.repAudio?.[0];
@@ -582,6 +614,51 @@ async function runReviewFromTracks(
       status: "failed",
       error: err instanceof Error ? err.message : String(err),
     });
+  }
+}
+
+// --- Re-analysis -------------------------------------------------------------
+// Re-scores a completed review from its stored transcript (no re-transcription).
+// In-memory FIFO, drained one job at a time so bulk re-analysis doesn't hammer
+// the model API. Lost on restart — acceptable for a manual, occasional action.
+const reanalyzeQueue: string[] = [];
+let reanalyzeDraining = false;
+
+function enqueueReanalysis(jobId: string): boolean {
+  if (reanalyzeQueue.includes(jobId)) return false;
+  reanalyzeQueue.push(jobId);
+  void drainReanalyzeQueue();
+  return true;
+}
+
+async function drainReanalyzeQueue() {
+  if (reanalyzeDraining) return;
+  reanalyzeDraining = true;
+  try {
+    while (reanalyzeQueue.length > 0) {
+      // Keep the id in the queue while it runs so re-enqueueing is blocked.
+      await runReanalysis(reanalyzeQueue[0]);
+      reanalyzeQueue.shift();
+    }
+  } finally {
+    reanalyzeDraining = false;
+  }
+}
+
+async function runReanalysis(jobId: string) {
+  const job = store.get(jobId);
+  if (!job || job.status !== "completed" || !job.result) return;
+  const frameworks = loadFrameworks();
+  const framework =
+    frameworks.get(job.result.frameworkId) ?? frameworks.get(pickDefaultFrameworkId(frameworks))!;
+  store.update(jobId, { status: "analyzing" });
+  try {
+    const result = await reanalyzeCall(job.result, { framework });
+    store.update(jobId, { status: "completed", result, reanalyzedAt: new Date().toISOString() });
+  } catch (err) {
+    // Never lose the existing report — restore it and move on.
+    console.error(`Re-analysis of ${jobId} failed; keeping the previous report:`, err);
+    store.update(jobId, { status: "completed" });
   }
 }
 

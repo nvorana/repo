@@ -35,6 +35,8 @@ export interface ReviewJob {
   repAudioFile?: string;
   /** Stored client-track audio file name (separate-tracks uploads). */
   clientAudioFile?: string;
+  /** Set when the report was re-scored from its stored transcript. */
+  reanalyzedAt?: string;
   coach?: CoachFeedback;
   error?: string;
   result?: CallReviewResult;
