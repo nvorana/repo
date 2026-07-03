@@ -81,8 +81,9 @@ export function Reports({ reviews }: { reviews: ReviewSummary[] }) {
       <div>
         <h1 className="mb-1 text-2xl font-bold">Sales Team Performance</h1>
         <p className="opacity-60">
-          No reviewed calls in this range yet. Trends will appear here as calls get reviewed over the
-          weeks.
+          {excludedMixed > 0
+            ? `${excludedMixed} reviewed call${excludedMixed === 1 ? "" : "s"} in this range, but all were analyzed from mixed audio and are excluded from trends. Trends will build as calls recorded with separate rep/client tracks are reviewed.`
+            : "No reviewed calls in this range yet. Trends will appear here as calls get reviewed over the weeks."}
         </p>
       </div>
     );
