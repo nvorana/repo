@@ -26,6 +26,21 @@ function safeVerify(review: CallReview, transcript: Transcript): ReviewVerificat
   }
 }
 
+/** Runs analysis + anchoring + best-effort verification, and assembles the result. Shared tail for every pipeline entry point once a transcript is in hand. */
+async function analyzeAndFinish(
+  analyzer: CallAnalyzer,
+  transcript: Transcript,
+  framework: SalesFramework,
+): Promise<CallReviewResult> {
+  const metrics = computeDeliveryMetrics(transcript);
+  const review = anchorReviewTimestamps(
+    await analyzer.analyze(transcript, metrics, framework),
+    transcript,
+  );
+  const verification = safeVerify(review, transcript);
+  return { review, metrics, transcript, frameworkId: framework.id, verification };
+}
+
 export interface ReviewPipelineOptions {
   transcriber: TranscriptionProvider;
   framework?: SalesFramework;
@@ -57,14 +72,7 @@ export async function reviewCall(
   await analyzer.identifySpeakers(transcript);
 
   options.onStage?.("analyzing");
-  const metrics = computeDeliveryMetrics(transcript);
-  const review = anchorReviewTimestamps(
-    await analyzer.analyze(transcript, metrics, framework),
-    transcript,
-  );
-
-  const verification = safeVerify(review, transcript);
-  return { review, metrics, transcript, frameworkId: framework.id, verification };
+  return analyzeAndFinish(analyzer, transcript, framework);
 }
 
 export interface ReanalyzeOptions {
@@ -75,7 +83,8 @@ export interface ReanalyzeOptions {
 /**
  * Re-runs the analysis stage on an already-transcribed call: fresh metrics,
  * fresh review, anchored timestamps, quote verification. No transcriber —
- * the stored transcript is reused, so this costs one model call.
+ * the stored transcript is reused, so no transcription cost is incurred —
+ * only the analysis model call.
  */
 export async function reanalyzeCall(
   previous: CallReviewResult,
@@ -87,13 +96,7 @@ export async function reanalyzeCall(
   if (transcript.utterances.length === 0) {
     throw new Error("Stored transcript has no utterances — cannot re-analyze.");
   }
-  const metrics = computeDeliveryMetrics(transcript);
-  const review = anchorReviewTimestamps(
-    await analyzer.analyze(transcript, metrics, framework),
-    transcript,
-  );
-  const verification = safeVerify(review, transcript);
-  return { review, metrics, transcript, frameworkId: framework.id, verification };
+  return analyzeAndFinish(analyzer, transcript, framework);
 }
 
 export interface CallTracks {
@@ -159,11 +162,5 @@ export async function reviewCallFromTracks(
   const transcript = mergeTracks(repT, clientT);
 
   options.onStage?.("analyzing");
-  const metrics = computeDeliveryMetrics(transcript);
-  const review = anchorReviewTimestamps(
-    await analyzer.analyze(transcript, metrics, framework),
-    transcript,
-  );
-  const verification = safeVerify(review, transcript);
-  return { review, metrics, transcript, frameworkId: framework.id, verification };
+  return analyzeAndFinish(analyzer, transcript, framework);
 }
