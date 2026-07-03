@@ -3,15 +3,28 @@ import { CallAnalyzer, type AnalyzerOptions } from "./analyzer.ts";
 import { computeDeliveryMetrics } from "./metrics.ts";
 import { anchorReviewTimestamps } from "./anchor.ts";
 import { defaultFramework } from "./frameworks/default.ts";
+import { verifyReviewClaims } from "./verify.ts";
 import type { SalesFramework } from "./frameworks/types.ts";
 import type {
+  CallReview,
   CallReviewResult,
+  ReviewVerification,
   SpeakerRole,
   Transcript,
   TranscriptUtterance,
 } from "./types.ts";
 
 export type ReviewStage = "transcribing" | "identifying_speakers" | "analyzing";
+
+/** Verification is best-effort: a checker bug must never fail the job. */
+function safeVerify(review: CallReview, transcript: Transcript): ReviewVerification | undefined {
+  try {
+    return verifyReviewClaims(review, transcript);
+  } catch (err) {
+    console.error("Quote verification failed; saving review unchecked:", err);
+    return undefined;
+  }
+}
 
 export interface ReviewPipelineOptions {
   transcriber: TranscriptionProvider;
@@ -50,7 +63,14 @@ export async function reviewCall(
     transcript,
   );
 
-  return { review, metrics, transcript, frameworkId: framework.id };
+  const verification = safeVerify(review, transcript);
+  return {
+    review,
+    metrics,
+    transcript,
+    frameworkId: framework.id,
+    ...(verification ? { verification } : {}),
+  };
 }
 
 export interface CallTracks {
@@ -121,5 +141,12 @@ export async function reviewCallFromTracks(
     await analyzer.analyze(transcript, metrics, framework),
     transcript,
   );
-  return { review, metrics, transcript, frameworkId: framework.id };
+  const verification = safeVerify(review, transcript);
+  return {
+    review,
+    metrics,
+    transcript,
+    frameworkId: framework.id,
+    ...(verification ? { verification } : {}),
+  };
 }

@@ -17,6 +17,7 @@ export type { AnalyzerOptions } from "./analyzer.ts";
 
 export { computeDeliveryMetrics, formatTimestamp } from "./metrics.ts";
 export { anchorReviewTimestamps, locateQuoteMs } from "./anchor.ts";
+export { verifyReviewClaims, quoteAppears } from "./verify.ts";
 
 export type { TranscriptionProvider, AudioInput } from "./transcription/provider.ts";
 export { AssemblyAIProvider } from "./transcription/assemblyai.ts";
