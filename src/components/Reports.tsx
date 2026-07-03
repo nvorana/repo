@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { ReviewSummary } from "../api.ts";
+import { countsTowardTrends } from "../lib/eligibility.ts";
 import { Avatar } from "./Avatar.tsx";
 
 interface Scored {
@@ -55,8 +56,15 @@ export function Reports({ reviews }: { reviews: ReviewSummary[] }) {
   const weeks = RANGES[rangeIdx].weeks;
   const cutoff = weeks >= 9999 ? 0 : now - weeks * 7 * 86_400_000;
 
+  const excludedMixed = reviews.filter(
+    (r) =>
+      r.status === "completed" &&
+      r.overallScore != null &&
+      !countsTowardTrends(r) &&
+      new Date(r.callDate ?? r.createdAt).getTime() >= cutoff,
+  ).length;
   const scored: Scored[] = reviews
-    .filter((r) => r.status === "completed" && r.overallScore != null)
+    .filter(countsTowardTrends)
     .map((r) => ({
       date: new Date(r.callDate ?? r.createdAt).getTime(),
       score: r.overallScore!,
@@ -172,6 +180,12 @@ export function Reports({ reviews }: { reviews: ReviewSummary[] }) {
         <div>
           <h1 className="text-3xl font-bold">Sales Team Performance</h1>
           <p className="mt-1 opacity-60">How the team is trending — over {totalCalls} reviewed calls</p>
+          {excludedMixed > 0 && (
+            <p className="text-xs opacity-50">
+              {totalCalls + excludedMixed} calls, {totalCalls} in trend — {excludedMixed} mixed-audio
+              call{excludedMixed === 1 ? "" : "s"} excluded
+            </p>
+          )}
         </div>
         <div className="flex flex-col items-end gap-2">
           <div className="join rounded-lg border border-base-300">

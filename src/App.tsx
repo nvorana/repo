@@ -13,6 +13,7 @@ import {
   type ReviewSummary,
   type Session,
 } from "./api.ts";
+import { countsTowardTrends } from "./lib/eligibility.ts";
 import { UploadCard } from "./components/UploadCard.tsx";
 import { Report } from "./components/Report.tsx";
 import { UsersAdmin } from "./components/UsersAdmin.tsx";
@@ -599,7 +600,7 @@ interface RepStats {
 function computeRepStats(reviews: ReviewSummary[]): RepStats[] {
   const byRep = new Map<string, ReviewSummary[]>();
   for (const r of reviews) {
-    if (r.rep && r.status === "completed" && r.overallScore != null) {
+    if (r.rep && countsTowardTrends(r)) {
       const list = byRep.get(r.rep) ?? [];
       list.push(r);
       byRep.set(r.rep, list);
