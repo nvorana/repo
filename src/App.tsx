@@ -6,6 +6,8 @@ import {
   listReviews,
   login,
   logout,
+  reanalyzeMine,
+  reanalyzeReview,
   saveCoachFeedback,
   deleteReview,
   STATUS_LABELS,
@@ -29,6 +31,9 @@ export default function App() {
   const [reviews, setReviews] = useState<ReviewSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selected, setSelected] = useState<ReviewJob | null>(null);
+  // Bumping this restarts the detail fetch/poll loop below — used after actions
+  // (like re-analysis) that change a job's status once its poll has stopped.
+  const [detailRefresh, setDetailRefresh] = useState(0);
 
   useEffect(() => {
     getSession()
@@ -80,7 +85,7 @@ export default function App() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [selectedId]);
+  }, [selectedId, detailRefresh]);
 
   async function handleLogout() {
     await logout();
@@ -171,6 +176,7 @@ export default function App() {
             job={selected?.id === selectedId ? selected : null}
             canCoach={isManager}
             onUpdated={setSelected}
+            refresh={() => setDetailRefresh((n) => n + 1)}
             onBack={() => {
               setSelectedId(null);
               refreshList();
@@ -185,6 +191,7 @@ export default function App() {
             reviews={reviews}
             myName={session.name}
             myId={session.id}
+            canReanalyze={isManager}
             onUploaded={(id) => {
               refreshList();
               setSelectedId(id);
@@ -263,18 +270,53 @@ function LoginScreen({ onLogin }: { onLogin: (s: Session) => void }) {
 
 // --- Rep hero: "My Coaching" ------------------------------------------------
 
+function ReanalyzeAllButton({ count }: { count: number }) {
+  const [state, setState] = useState<"idle" | "working" | "done" | "error">("idle");
+  const [queued, setQueued] = useState(0);
+  if (count === 0) return null;
+  return (
+    <div className="flex items-center gap-2">
+      {state === "done" && (
+        <span className="text-xs opacity-60">
+          Queued {queued} call{queued === 1 ? "" : "s"} — reports refresh as each finishes.
+        </span>
+      )}
+      {state === "error" && <span className="text-xs text-error">Couldn&apos;t queue — try again.</span>}
+      <button
+        className="btn btn-outline btn-sm"
+        disabled={state === "working" || state === "done"}
+        onClick={() => {
+          setState("working");
+          reanalyzeMine()
+            .then((r) => {
+              setQueued(r.queued);
+              setState("done");
+            })
+            .catch(() => setState("error"));
+        }}
+        title="Re-run the AI analysis on all your completed calls with the current scoring engine"
+      >
+        ↻ Re-analyze all my calls ({count})
+      </button>
+    </div>
+  );
+}
+
 function RepHome({
   reviews,
   myName,
   myId,
   onUploaded,
   onSelect,
+  canReanalyze = false,
 }: {
   reviews: ReviewSummary[];
   myName: string;
   myId: string;
   onUploaded: (id: string) => void;
   onSelect: (id: string) => void;
+  /** Managers get the bulk re-analyze button on their own calls. */
+  canReanalyze?: boolean;
 }) {
   const mine = reviews.filter((r) => (r.repId ? r.repId === myId : r.rep === myName));
   const stats = computeRepStats(mine)[0];
@@ -334,7 +376,12 @@ function RepHome({
       </section>
 
       <section>
-        <h2 className="mb-3 text-lg font-semibold">Your calls</h2>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-lg font-semibold">Your calls</h2>
+          {canReanalyze && (
+            <ReanalyzeAllButton count={mine.filter((r) => r.status === "completed").length} />
+          )}
+        </div>
         <ReviewBrowser reviews={mine} onSelect={onSelect} showRep={false} statusFilter />
       </section>
     </div>
@@ -883,11 +930,14 @@ function DetailView({
   canCoach,
   onBack,
   onUpdated,
+  refresh,
 }: {
   job: ReviewJob | null;
   canCoach: boolean;
   onBack: () => void;
   onUpdated: (job: ReviewJob) => void;
+  /** Refetches the job and restarts the in-progress poll (owned by App). */
+  refresh: () => void;
 }) {
   const [deleting, setDeleting] = useState(false);
 
@@ -935,6 +985,25 @@ function DetailView({
           <div className="mb-6 flex flex-wrap items-center gap-3">
             <h1 className="min-w-0 truncate text-2xl font-bold">{job.client ?? job.filename}</h1>
             {job.rep && <span className="badge badge-info">{job.rep}</span>}
+            {job.reanalyzedAt && (
+              <span
+                className="badge badge-ghost badge-sm"
+                title="This report was re-scored from its transcript with the current scoring engine"
+              >
+                Re-scored {new Date(job.reanalyzedAt).toLocaleDateString()}
+              </span>
+            )}
+            {canCoach && (
+              <button
+                onClick={() => {
+                  void reanalyzeReview(job.id).then(refresh).catch(() => {});
+                }}
+                className="print-hide btn btn-outline btn-sm"
+                title="Re-run the AI analysis on this call's transcript with the current scoring engine"
+              >
+                ↻ Re-analyze
+              </button>
+            )}
             <button onClick={() => window.print()} className="print-hide btn btn-outline btn-sm ml-auto">
               🖨 Print / Save PDF
             </button>

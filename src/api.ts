@@ -58,6 +58,8 @@ export interface ReviewJob {
   released?: boolean;
   /** True when the review was analyzed from one mixed file (guessed speakers). */
   mixedAudio?: boolean;
+  /** Set when the report was re-scored from its stored transcript. */
+  reanalyzedAt?: string;
   error?: string;
   result?: CallReviewResult;
 }
@@ -79,6 +81,16 @@ export async function saveCoachFeedback(
     body: JSON.stringify({ notes, reviewed, released }),
   });
   return json<ReviewJob>(res);
+}
+
+export async function reanalyzeReview(id: string): Promise<void> {
+  const res = await api(`/api/reviews/${id}/reanalyze`, { method: "POST" });
+  await json(res);
+}
+
+export async function reanalyzeMine(): Promise<{ queued: number }> {
+  const res = await api("/api/reanalyze/mine", { method: "POST" });
+  return json<{ queued: number }>(res);
 }
 
 export function audioUrl(id: string, track?: "rep" | "client"): string {
