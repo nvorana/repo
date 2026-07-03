@@ -64,13 +64,7 @@ export async function reviewCall(
   );
 
   const verification = safeVerify(review, transcript);
-  return {
-    review,
-    metrics,
-    transcript,
-    frameworkId: framework.id,
-    ...(verification ? { verification } : {}),
-  };
+  return { review, metrics, transcript, frameworkId: framework.id, verification };
 }
 
 export interface CallTracks {
@@ -142,11 +136,5 @@ export async function reviewCallFromTracks(
     transcript,
   );
   const verification = safeVerify(review, transcript);
-  return {
-    review,
-    metrics,
-    transcript,
-    frameworkId: framework.id,
-    ...(verification ? { verification } : {}),
-  };
+  return { review, metrics, transcript, frameworkId: framework.id, verification };
 }
