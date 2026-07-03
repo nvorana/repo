@@ -182,7 +182,7 @@ export function Reports({ reviews }: { reviews: ReviewSummary[] }) {
           <h1 className="text-3xl font-bold">Sales Team Performance</h1>
           <p className="mt-1 opacity-60">How the team is trending — over {totalCalls} reviewed calls</p>
           {excludedMixed > 0 && (
-            <p className="text-xs opacity-50">
+            <p className="mt-1 text-xs opacity-50">
               {totalCalls + excludedMixed} calls, {totalCalls} in trend — {excludedMixed} mixed-audio
               call{excludedMixed === 1 ? "" : "s"} excluded
             </p>

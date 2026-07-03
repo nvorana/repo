@@ -26,10 +26,12 @@ export function Report({
   result,
   reviewId,
   separateTracks = false,
+  mixedAudio = false,
 }: {
   result: CallReviewResult;
   reviewId: string;
   separateTracks?: boolean;
+  mixedAudio?: boolean;
 }) {
   const { review, metrics } = result;
   const repAudioRef = useRef<HTMLAudioElement>(null);
@@ -52,6 +54,15 @@ export function Report({
 
   return (
     <div className="space-y-5">
+      {mixedAudio && (
+        <div role="alert" className="alert alert-warning text-sm">
+          <span>
+            <strong>Mixed audio recording</strong> — speaker attribution may be inaccurate. Scores
+            from this call are excluded from progress trends. For exact numbers, upload each
+            person&apos;s separate Zoom track next time.
+          </span>
+        </div>
+      )}
       {hasAudio && (
         <div className="print-hide sticky top-0 z-10 -mx-2 space-y-2 rounded-box bg-base-100/95 p-2 backdrop-blur">
           {separateTracks ? (

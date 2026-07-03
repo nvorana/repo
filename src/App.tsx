@@ -426,6 +426,14 @@ function ReviewRow({
             ) : (
               <span className="badge badge-warning badge-outline badge-sm">Awaiting coach</span>
             ))}
+          {r.status === "completed" && r.mixedAudio && (
+            <span
+              className="badge badge-ghost badge-sm"
+              title="Analyzed from one mixed recording — speaker attribution may be inaccurate; excluded from trends"
+            >
+              Mixed audio
+            </span>
+          )}
         </div>
         <div className="truncate text-sm opacity-60">
           {r.status === "failed"
@@ -950,6 +958,7 @@ function DetailView({
             result={job.result}
             reviewId={job.id}
             separateTracks={Boolean(job.clientAudioFile)}
+            mixedAudio={Boolean(job.mixedAudio)}
           />
         </div>
       )}
