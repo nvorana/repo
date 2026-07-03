@@ -5,6 +5,9 @@ import type { CallReview, ReviewVerification, Transcript, VerifiedSection } from
 // already the real audio time of its quote. Failures are flagged, not
 // stripped — the UI shows them; nothing is silently deleted.
 
+// Intentionally different from anchor.ts's norm: this one turns intra-word
+// punctuation into spaces ("don't" -> "don t") while anchor strips it
+// ("dont") — do not unify them blindly.
 function norm(s: string): string {
   return s
     .toLowerCase()
@@ -22,10 +25,11 @@ function inOrderOverlap(quote: string[], utterance: string[]): number {
   let i = 0;
   let matched = 0;
   for (const t of quote) {
-    while (i < utterance.length && utterance[i] !== t) i++;
-    if (i < utterance.length) {
+    let j = i;
+    while (j < utterance.length && utterance[j] !== t) j++;
+    if (j < utterance.length) {
       matched++;
-      i++;
+      i = j + 1;
     }
   }
   return matched;

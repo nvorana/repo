@@ -75,12 +75,43 @@ describe("verifyReviewClaims", () => {
 
   it("verifies a lightly paraphrased quote (>=80% tokens in order, one utterance)", () => {
     // "talk to my partner and get back to you next week" — drops "business";
-    // 10 of 11 tokens appear in order in utterance 2.
+    // all 11 quote tokens appear in order in utterance 2 (which merely has
+    // the extra token "business" between "my" and "partner").
     const v = verifyReviewClaims(
       reviewWith({ wrong: ["talk to my partner and get back to you next week"] }),
       t,
     );
     expect(v.claimsVerified).toBe(1);
+  });
+
+  it("verifies a quote with one substituted word mid-quote", () => {
+    // "price is really steep for a team our size" — 9 tokens; "is" appears
+    // nowhere in utterance 1, but the other 8 appear there in order;
+    // need ceil(9 * 0.8) = 8. A token missing mid-quote must not derail
+    // matching of the tokens that follow it.
+    const v = verifyReviewClaims(
+      reviewWith({ objections: ["price is really steep for a team our size"] }),
+      t,
+    );
+    expect(v.claimsVerified).toBe(1);
+  });
+
+  it("does not verify a quote that only reaches 80% by spanning utterances", () => {
+    // 12 tokens, need ceil(12 * 0.8) = 10; utterance 1 supplies 5 in order
+    // and utterance 2 supplies 7, but no single utterance reaches 10 — and
+    // it is not a substring of the full text ("for a team our size" is
+    // missing between the two halves).
+    const v = verifyReviewClaims(
+      reviewWith({
+        wrong: ["the price feels really steep let me talk to my business partner"],
+      }),
+      t,
+    );
+    expect(v).toEqual({
+      claimsChecked: 1,
+      claimsVerified: 0,
+      unverified: [{ section: "whatWentWrong", index: 0 }],
+    });
   });
 
   it("flags a fabricated quote with its section and index", () => {
