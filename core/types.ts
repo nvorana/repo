@@ -205,6 +205,23 @@ export type CoachingItem = z.infer<typeof coachingItemSchema>;
 export type CallReview = z.infer<typeof callReviewSchema>;
 
 // ---------------------------------------------------------------------------
+// Claim verification — computed in code after analysis. Each quote the AI
+// cites is checked against the transcript; failures are flagged, never
+// stripped. Absent on reviews analyzed before this feature existed.
+// ---------------------------------------------------------------------------
+
+export type VerifiedSection = "whatWentRight" | "whatWentWrong" | "objections";
+
+export interface ReviewVerification {
+  /** Number of claims that carried a checkable quote. */
+  claimsChecked: number;
+  /** How many of those quotes were found in the transcript. */
+  claimsVerified: number;
+  /** Position of each claim whose quote could NOT be found. */
+  unverified: { section: VerifiedSection; index: number }[];
+}
+
+// ---------------------------------------------------------------------------
 // Full result returned by the pipeline.
 // ---------------------------------------------------------------------------
 
@@ -213,4 +230,6 @@ export interface CallReviewResult {
   metrics: DeliveryMetrics;
   transcript: Transcript;
   frameworkId: string;
+  /** Quote-verification summary; absent on legacy results and if the checker errored. */
+  verification?: ReviewVerification;
 }
