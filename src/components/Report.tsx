@@ -34,6 +34,11 @@ export function Report({
   mixedAudio?: boolean;
 }) {
   const { review, metrics } = result;
+  const verification = result.verification;
+  const unverifiedIn = (section: "whatWentRight" | "whatWentWrong" | "objections") =>
+    new Set(
+      (verification?.unverified ?? []).filter((u) => u.section === section).map((u) => u.index),
+    );
   const repAudioRef = useRef<HTMLAudioElement>(null);
   const clientAudioRef = useRef<HTMLAudioElement>(null);
   const [hasAudio, setHasAudio] = useState(true);
@@ -60,6 +65,14 @@ export function Report({
             <strong>Mixed audio recording</strong> — speaker attribution may be inaccurate. Scores
             from this call are excluded from progress trends. For exact numbers, upload each
             person&apos;s separate Zoom track next time.
+          </span>
+        </div>
+      )}
+      {verification && verification.unverified.length > 0 && (
+        <div className="alert alert-warning text-sm">
+          <span>
+            {verification.claimsVerified} of {verification.claimsChecked} claims verified against
+            the transcript — unverified claims are marked below and should be read with caution.
           </span>
         </div>
       )}
@@ -125,12 +138,12 @@ export function Report({
       </Pane>
       <Pane show={tab === "winsmisses"}>
         <div className="grid gap-6 lg:grid-cols-2">
-          <FindingList title="What went right" tone="good" items={review.whatWentRight} onSeek={onSeek} />
-          <FindingList title="What went wrong" tone="bad" items={review.whatWentWrong} onSeek={onSeek} />
+          <FindingList title="What went right" tone="good" items={review.whatWentRight} onSeek={onSeek} unverified={unverifiedIn("whatWentRight")} />
+          <FindingList title="What went wrong" tone="bad" items={review.whatWentWrong} onSeek={onSeek} unverified={unverifiedIn("whatWentWrong")} />
         </div>
       </Pane>
       <Pane show={tab === "objections"}>
-        <Objections objections={review.objections} onSeek={onSeek} />
+        <Objections objections={review.objections} onSeek={onSeek} unverified={unverifiedIn("objections")} />
       </Pane>
       <Pane show={tab === "delivery"}>
         {!separateTracks && (
@@ -354,14 +367,17 @@ function FindingList({
   tone,
   items,
   onSeek,
+  unverified,
 }: {
   title: string;
   tone: "good" | "bad";
   items: TimestampedFinding[];
   onSeek?: (seconds: number) => void;
+  unverified?: Set<number>;
 }) {
   const accent = tone === "good" ? "border-success" : "border-error";
-  const sorted = sortByImpact(items);
+  const indexed = items.map((item, originalIndex) => ({ ...item, originalIndex }));
+  const sorted = sortByImpact(indexed);
   return (
     <section>
       <h2 className="mb-3 text-lg font-semibold">{title}</h2>
@@ -379,6 +395,9 @@ function FindingList({
             <blockquote className="mt-2 border-l-2 border-base-300 pl-3 text-sm italic opacity-60">
               “{f.quote}”
             </blockquote>
+            {unverified?.has(f.originalIndex) && (
+              <p className="mt-1 text-xs font-medium text-warning">⚠ Quote not found in transcript</p>
+            )}
           </div>
         ))}
         {sorted.length === 0 && <p className="text-sm opacity-50">Nothing noted.</p>}
@@ -396,9 +415,11 @@ const HANDLED_BADGE: Record<Objection["handled"], [string, string]> = {
 function Objections({
   objections,
   onSeek,
+  unverified,
 }: {
   objections: Objection[];
   onSeek?: (seconds: number) => void;
+  unverified?: Set<number>;
 }) {
   // Unhandled first, then partially handled — the riskiest gaps on top.
   const order: Record<Objection["handled"], number> = {
@@ -406,7 +427,8 @@ function Objections({
     partially_handled: 1,
     handled: 2,
   };
-  const sorted = [...objections].sort((a, b) => order[a.handled] - order[b.handled]);
+  const indexed = objections.map((o, originalIndex) => ({ ...o, originalIndex }));
+  const sorted = indexed.sort((a, b) => order[a.handled] - order[b.handled]);
   return (
     <section>
       <h2 className="mb-1 text-lg font-semibold">Objections &amp; concerns</h2>
@@ -432,6 +454,9 @@ function Objections({
               <blockquote className="mt-2 border-l-2 border-base-300 pl-3 text-sm italic opacity-60">
                 “{o.quote}”
               </blockquote>
+              {unverified?.has(o.originalIndex) && (
+                <p className="mt-1 text-xs font-medium text-warning">⚠ Quote not found in transcript</p>
+              )}
               {o.howItWasHandled && (
                 <p className="mt-2 text-sm opacity-80">
                   <span className="font-semibold">What the rep did: </span>
