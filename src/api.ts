@@ -60,6 +60,8 @@ export interface ReviewJob {
   mixedAudio?: boolean;
   /** Set when the report was re-scored from its stored transcript. */
   reanalyzedAt?: string;
+  /** Rep "this is inaccurate" flags on findings. */
+  flags?: FindingFlag[];
   error?: string;
   result?: CallReviewResult;
 }
@@ -232,6 +234,54 @@ export interface FrameworkInfo {
 
 export function listFrameworks(): Promise<FrameworkInfo[]> {
   return api("/api/frameworks").then((r) => json<FrameworkInfo[]>(r));
+}
+
+// --- Flags & lessons ----------------------------------------------------------
+
+export interface FindingFlag {
+  section: "whatWentRight" | "whatWentWrong";
+  index: number;
+  createdAt: string;
+  assessment?: "lesson_proposed" | "no_lesson";
+}
+
+export interface Lesson {
+  id: string;
+  frameworkId: string;
+  text: string;
+  status: "proposed" | "applied" | "discarded";
+  rationale: string;
+  sourceReviewId: string;
+  sourceFindingPoint: string;
+  sourceNote?: string;
+  createdAt: string;
+  appliedAt?: string;
+}
+
+export async function flagFinding(
+  reviewId: string,
+  flag: { section: "whatWentRight" | "whatWentWrong"; index: number; note?: string },
+): Promise<void> {
+  const res = await api(`/api/reviews/${reviewId}/flags`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(flag),
+  });
+  await json(res);
+}
+
+export function listLessons(): Promise<Lesson[]> {
+  return api("/api/lessons").then((r) => json<Lesson[]>(r));
+}
+
+export async function applyLesson(id: string): Promise<Lesson> {
+  const res = await api(`/api/lessons/${id}/apply`, { method: "POST" });
+  return json<Lesson>(res);
+}
+
+export async function discardLesson(id: string): Promise<Lesson> {
+  const res = await api(`/api/lessons/${id}/discard`, { method: "POST" });
+  return json<Lesson>(res);
 }
 
 export const STATUS_LABELS: Record<JobStatus, string> = {

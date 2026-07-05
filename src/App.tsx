@@ -18,6 +18,7 @@ import {
 import { countsTowardTrends } from "./lib/eligibility.ts";
 import { UploadCard } from "./components/UploadCard.tsx";
 import { Report } from "./components/Report.tsx";
+import { LessonsPanel } from "./components/Lessons.tsx";
 import { UsersAdmin } from "./components/UsersAdmin.tsx";
 import { Reports } from "./components/Reports.tsx";
 
@@ -417,6 +418,7 @@ function ManagerHome({
 
   return (
     <div className="space-y-6">
+      <LessonsPanel />
       <section>
         <h1 className="mb-1 text-2xl font-bold">Team coaching</h1>
         <p className="opacity-60">
@@ -1045,6 +1047,7 @@ function DetailView({
             reviewId={job.id}
             separateTracks={Boolean(job.clientAudioFile)}
             mixedAudio={Boolean(job.mixedAudio)}
+            flags={job.flags}
           />
         </div>
       )}

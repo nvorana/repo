@@ -8,7 +8,7 @@ import type {
   TimestampedFinding,
   Transcript,
 } from "../../core/types.ts";
-import { audioUrl } from "../api.ts";
+import { audioUrl, flagFinding, type FindingFlag } from "../api.ts";
 
 type Tab = "summary" | "winsmisses" | "objections" | "delivery" | "scorecard" | "coaching" | "transcript";
 
@@ -27,11 +27,13 @@ export function Report({
   reviewId,
   separateTracks = false,
   mixedAudio = false,
+  flags,
 }: {
   result: CallReviewResult;
   reviewId: string;
   separateTracks?: boolean;
   mixedAudio?: boolean;
+  flags?: FindingFlag[];
 }) {
   const { review, metrics } = result;
   const verification = result.verification;
@@ -39,6 +41,8 @@ export function Report({
     new Set(
       (verification?.unverified ?? []).filter((u) => u.section === section).map((u) => u.index),
     );
+  const flaggedIn = (section: "whatWentRight" | "whatWentWrong") =>
+    new Set((flags ?? []).filter((f) => f.section === section).map((f) => f.index));
   const repAudioRef = useRef<HTMLAudioElement>(null);
   const clientAudioRef = useRef<HTMLAudioElement>(null);
   const [hasAudio, setHasAudio] = useState(true);
@@ -138,8 +142,28 @@ export function Report({
       </Pane>
       <Pane show={tab === "winsmisses"}>
         <div className="grid gap-6 lg:grid-cols-2">
-          <FindingList title="What went right" tone="good" items={review.whatWentRight} onSeek={onSeek} unverified={unverifiedIn("whatWentRight")} />
-          <FindingList title="What went wrong" tone="bad" items={review.whatWentWrong} onSeek={onSeek} unverified={unverifiedIn("whatWentWrong")} />
+          <FindingList
+            title="What went right"
+            tone="good"
+            items={review.whatWentRight}
+            onSeek={onSeek}
+            unverified={unverifiedIn("whatWentRight")}
+            flagged={flaggedIn("whatWentRight")}
+            onFlag={(index, note) =>
+              flagFinding(reviewId, { section: "whatWentRight", index, note: note || undefined })
+            }
+          />
+          <FindingList
+            title="What went wrong"
+            tone="bad"
+            items={review.whatWentWrong}
+            onSeek={onSeek}
+            unverified={unverifiedIn("whatWentWrong")}
+            flagged={flaggedIn("whatWentWrong")}
+            onFlag={(index, note) =>
+              flagFinding(reviewId, { section: "whatWentWrong", index, note: note || undefined })
+            }
+          />
         </div>
       </Pane>
       <Pane show={tab === "objections"}>
@@ -362,18 +386,62 @@ function ImpactChip({ impact, tone }: { impact?: string; tone: "good" | "bad" })
   return <span className={`badge badge-sm ${cls}`}>{label}</span>;
 }
 
+function FlagLink({ onFlag }: { onFlag: (note: string) => Promise<void> }) {
+  const [state, setState] = useState<"idle" | "note" | "sending" | "done" | "error">("idle");
+  const [note, setNote] = useState("");
+  if (state === "done") return <p className="mt-1 text-xs opacity-50">Flagged ✓ — thanks, noted.</p>;
+  if (state === "idle") {
+    return (
+      <button
+        className="print-hide mt-1 text-xs opacity-40 hover:opacity-80 hover:underline"
+        onClick={() => setState("note")}
+      >
+        Flag as inaccurate
+      </button>
+    );
+  }
+  return (
+    <div className="print-hide mt-2 flex flex-wrap items-center gap-2">
+      <input
+        type="text"
+        className="input input-sm input-bordered w-full max-w-xs"
+        placeholder="What did the AI get wrong? (optional)"
+        value={note}
+        maxLength={500}
+        onChange={(e) => setNote(e.target.value)}
+        disabled={state === "sending"}
+      />
+      <button
+        className="btn btn-outline btn-xs"
+        disabled={state === "sending"}
+        onClick={() => {
+          setState("sending");
+          onFlag(note).then(() => setState("done")).catch(() => setState("error"));
+        }}
+      >
+        {state === "sending" ? <span className="loading loading-spinner loading-xs" /> : "Submit"}
+      </button>
+      {state === "error" && <span className="text-xs text-error">Couldn&apos;t send — try again.</span>}
+    </div>
+  );
+}
+
 function FindingList({
   title,
   tone,
   items,
   onSeek,
   unverified,
+  flagged,
+  onFlag,
 }: {
   title: string;
   tone: "good" | "bad";
   items: TimestampedFinding[];
   onSeek?: (seconds: number) => void;
   unverified?: Set<number>;
+  flagged?: Set<number>;
+  onFlag?: (originalIndex: number, note: string) => Promise<void>;
 }) {
   const accent = tone === "good" ? "border-success" : "border-error";
   const indexed = items.map((item, originalIndex) => ({ ...item, originalIndex }));
@@ -398,6 +466,12 @@ function FindingList({
             {unverified?.has(f.originalIndex) && (
               <p className="mt-1 text-xs font-medium text-warning">⚠ Quote not found in transcript</p>
             )}
+            {onFlag &&
+              (flagged?.has(f.originalIndex) ? (
+                <p className="print-hide mt-1 text-xs opacity-50">Flagged ✓</p>
+              ) : (
+                <FlagLink onFlag={(note) => onFlag(f.originalIndex, note)} />
+              ))}
           </div>
         ))}
         {sorted.length === 0 && <p className="text-sm opacity-50">Nothing noted.</p>}
