@@ -15,6 +15,8 @@ export type { ReviewPipelineOptions, ReanalyzeOptions, ReviewStage, CallTracks }
 export { CallAnalyzer } from "./analyzer.ts";
 export type { AnalyzerOptions } from "./analyzer.ts";
 
+export { distillLesson, type DistillInput, type DistillResult } from "./lessons.ts";
+
 export { computeDeliveryMetrics, formatTimestamp } from "./metrics.ts";
 export { anchorReviewTimestamps, locateQuoteMs } from "./anchor.ts";
 export { verifyReviewClaims, quoteAppears } from "./verify.ts";
