@@ -147,7 +147,15 @@ ACCURACY IS CRITICAL — a review that misstates what happened destroys trust:
   call. Tie each observation to what genuinely followed at that point.
 - Every quote must be the ACTUAL words spoken at the moment you're describing —
   never attach a quote from one part of the call to a claim about another.
-
+${
+  framework.lessons?.length
+    ? `
+LEARNED CALIBRATIONS — corrections distilled from past reviews the coach has
+approved. Apply them when judging this call:
+${framework.lessons.map((l) => `- ${l}`).join("\n")}
+`
+    : ""
+}
 SCORING FRAMEWORK — "${framework.name}":
 ${framework.guidance}
 

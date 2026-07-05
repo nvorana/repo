@@ -14,6 +14,11 @@ export interface SalesFramework {
   guidance: string;
   /** The criteria each call is scored on (1-5 each). */
   criteria: FrameworkCriterion[];
+  /**
+   * Coach-approved corrections distilled from disputed findings. Injected
+   * into the reviewer's system prompt so past mistakes aren't repeated.
+   */
+  lessons?: string[];
 }
 
 export interface FrameworkCriterion {
