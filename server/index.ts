@@ -442,10 +442,12 @@ app.get("/api/reviews/:id", (req, res) => {
   if (roleOf(req) === "rep") {
     if (!repOwns(job, user)) return res.status(404).json({ error: "Review not found" });
     if (!repReleased(job)) {
-      // Hide the report body and coach notes until released.
-      const { result: _r, coach: _c, ...rest } = job;
+      // Hide the report body, coach notes and flags until released — flag
+      // finding snapshots quote the hidden report verbatim.
+      const { result: _r, coach: _c, flags: _f, ...rest } = job;
       void _r;
       void _c;
+      void _f;
       return res.json({ ...rest, released, mixedAudio: isMixedAudio(job) });
     }
   } else if (!managerCanSee(job, user)) {
@@ -508,7 +510,7 @@ app.post("/api/reviews/:id/flags", (req, res) => {
     createdAt: new Date().toISOString(),
   };
   store.update(job.id, { flags: [...flags, flag] });
-  enqueueDistillation(job.id, flag.createdAt);
+  enqueueDistillation(job.id, flag.section, flag.index);
   res.status(202).json({ ok: true });
 });
 
@@ -751,12 +753,16 @@ async function runReanalysis(jobId: string) {
 // Each rep flag gets one skeptical model pass; substantive flags become
 // proposed lessons for the coach. Same hardened sequential pattern as
 // re-analysis: in-memory FIFO, nothing may escape the drain.
-const distillQueue: { jobId: string; flagCreatedAt: string }[] = [];
+// A flag's identity is (jobId, section, index) — unique per review, enforced
+// by the endpoint's duplicate-flag 409.
+const distillQueue: { jobId: string; section: FindingFlag["section"]; index: number }[] = [];
 let distillDraining = false;
 
-function enqueueDistillation(jobId: string, flagCreatedAt: string) {
-  if (distillQueue.some((q) => q.jobId === jobId && q.flagCreatedAt === flagCreatedAt)) return;
-  distillQueue.push({ jobId, flagCreatedAt });
+function enqueueDistillation(jobId: string, section: FindingFlag["section"], index: number) {
+  if (distillQueue.some((q) => q.jobId === jobId && q.section === section && q.index === index)) {
+    return;
+  }
+  distillQueue.push({ jobId, section, index });
   void drainDistillQueue();
 }
 
@@ -773,10 +779,18 @@ async function drainDistillQueue() {
   }
 }
 
-async function runDistillation({ jobId, flagCreatedAt }: { jobId: string; flagCreatedAt: string }) {
+async function runDistillation({
+  jobId,
+  section,
+  index,
+}: {
+  jobId: string;
+  section: FindingFlag["section"];
+  index: number;
+}) {
   try {
     const job = store.get(jobId);
-    const flag = job?.flags?.find((f) => f.createdAt === flagCreatedAt);
+    const flag = job?.flags?.find((f) => f.section === section && f.index === index);
     if (!job?.result || !flag || flag.assessment) return;
     const frameworks = loadFrameworks();
     const framework =
@@ -803,7 +817,7 @@ async function runDistillation({ jobId, flagCreatedAt }: { jobId: string; flagCr
     if (!fresh?.flags) return;
     const assessment: FindingFlag["assessment"] = verdict.lesson ? "lesson_proposed" : "no_lesson";
     const stamped = fresh.flags.map((f) =>
-      f.createdAt === flagCreatedAt ? { ...f, assessment } : f,
+      f.section === section && f.index === index ? { ...f, assessment } : f,
     );
     store.update(jobId, { flags: stamped });
   } catch (err) {
@@ -815,7 +829,7 @@ async function runDistillation({ jobId, flagCreatedAt }: { jobId: string; flagCr
 // call per unprocessed flag at most).
 for (const job of store.list()) {
   for (const flag of job.flags ?? []) {
-    if (!flag.assessment) enqueueDistillation(job.id, flag.createdAt);
+    if (!flag.assessment) enqueueDistillation(job.id, flag.section, flag.index);
   }
 }
 
