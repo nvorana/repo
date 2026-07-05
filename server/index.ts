@@ -7,13 +7,15 @@ import { fileURLToPath } from "node:url";
 import {
   AssemblyAIProvider,
   defaultFramework,
+  distillLesson,
   frameworkFromMarkdown,
   reanalyzeCall,
   reviewCall,
   reviewCallFromTracks,
   type SalesFramework,
 } from "../core/index.ts";
-import { ReviewStore } from "./store.ts";
+import { ReviewStore, type FindingFlag } from "./store.ts";
+import { LessonStore } from "./lessons.ts";
 import { UserStore, toPublic, type Role, type User } from "./users.ts";
 import {
   clearSessionCookie,
@@ -71,6 +73,8 @@ for (const job of store.list()) {
     store.update(job.id, { status: "completed" });
   }
 }
+
+const lessonStore = new LessonStore(path.join(DATA_DIR, "lessons"));
 
 const users = new UserStore(USERS_FILE);
 
@@ -467,6 +471,68 @@ app.post("/api/reviews/:id/reanalyze", requireManager, (req, res) => {
   res.status(202).json({ ok: true });
 });
 
+app.post("/api/reviews/:id/flags", (req, res) => {
+  const job = store.get(String(req.params.id));
+  const user = currentUser(req);
+  if (!job) return res.status(404).json({ error: "Review not found" });
+  // Managers may flag anything they can see; a rep only their own released report.
+  const asManager = roleOf(req) === "manager" && managerCanSee(job, user);
+  const asOwner = roleOf(req) === "rep" && repOwns(job, user) && repReleased(job);
+  if (!asManager && !asOwner) return res.status(404).json({ error: "Review not found" });
+  if (job.status !== "completed" || !job.result) {
+    return res.status(409).json({ error: "Only completed reviews can be flagged." });
+  }
+  const { section, index, note } = req.body as {
+    section?: string;
+    index?: number;
+    note?: string;
+  };
+  if (section !== "whatWentRight" && section !== "whatWentWrong") {
+    return res.status(400).json({ error: "Invalid section." });
+  }
+  const findings = job.result.review[section];
+  if (!Number.isInteger(index) || index! < 0 || index! >= findings.length) {
+    return res.status(400).json({ error: "Invalid finding index." });
+  }
+  const flags = job.flags ?? [];
+  if (flags.some((f) => f.section === section && f.index === index)) {
+    return res.status(409).json({ error: "This finding was already flagged." });
+  }
+  const f = findings[index!];
+  const flag: FindingFlag = {
+    section,
+    index: index!,
+    finding: { point: f.point, detail: f.detail, quote: f.quote, timestamp: f.timestamp },
+    ...(typeof note === "string" && note.trim() ? { note: note.trim().slice(0, 500) } : {}),
+    ...(user ? { repId: user.id } : {}),
+    createdAt: new Date().toISOString(),
+  };
+  store.update(job.id, { flags: [...flags, flag] });
+  enqueueDistillation(job.id, flag.createdAt);
+  res.status(202).json({ ok: true });
+});
+
+app.get("/api/lessons", requireManager, (_req, res) => {
+  res.json(lessonStore.list());
+});
+
+app.post("/api/lessons/:id/apply", requireManager, (req, res) => {
+  try {
+    res.json(lessonStore.apply(String(req.params.id)));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(message.startsWith("Unknown lesson") ? 404 : 409).json({ error: message });
+  }
+});
+
+app.post("/api/lessons/:id/discard", requireManager, (req, res) => {
+  try {
+    res.json(lessonStore.discard(String(req.params.id)));
+  } catch {
+    res.status(404).json({ error: "Lesson not found" });
+  }
+});
+
 app.post("/api/reanalyze/mine", requireManager, (req, res) => {
   const user = currentUser(req);
   if (!user) return res.status(401).json({ error: "Not logged in" });
@@ -584,7 +650,7 @@ async function runReviewSingle(
       { data: file.buffer, filename: file.originalname, mimeType: file.mimetype },
       {
         transcriber: new AssemblyAIProvider(process.env.ASSEMBLYAI_API_KEY!),
-        framework,
+        framework: { ...framework, lessons: lessonStore.appliedTexts(framework.id) },
         onStage: (stage) => store.update(jobId, { status: stage }),
       },
     );
@@ -616,7 +682,7 @@ async function runReviewFromTracks(
       },
       {
         transcriber: new AssemblyAIProvider(process.env.ASSEMBLYAI_API_KEY!),
-        framework,
+        framework: { ...framework, lessons: lessonStore.appliedTexts(framework.id) },
         onStage: (stage) => store.update(jobId, { status: stage }),
       },
     );
@@ -666,7 +732,9 @@ async function runReanalysis(jobId: string) {
     const framework =
       frameworks.get(job.result.frameworkId) ?? frameworks.get(pickDefaultFrameworkId(frameworks))!;
     store.update(jobId, { status: "analyzing" });
-    const result = await reanalyzeCall(job.result, { framework });
+    const result = await reanalyzeCall(job.result, {
+      framework: { ...framework, lessons: lessonStore.appliedTexts(framework.id) },
+    });
     store.update(jobId, { status: "completed", result, reanalyzedAt: new Date().toISOString() });
   } catch (err) {
     // Never lose the existing report — restore it and move on.
@@ -676,6 +744,78 @@ async function runReanalysis(jobId: string) {
     } catch {
       // Job vanished mid-flight (deleted) — nothing to restore.
     }
+  }
+}
+
+// --- Flag distillation --------------------------------------------------------
+// Each rep flag gets one skeptical model pass; substantive flags become
+// proposed lessons for the coach. Same hardened sequential pattern as
+// re-analysis: in-memory FIFO, nothing may escape the drain.
+const distillQueue: { jobId: string; flagCreatedAt: string }[] = [];
+let distillDraining = false;
+
+function enqueueDistillation(jobId: string, flagCreatedAt: string) {
+  if (distillQueue.some((q) => q.jobId === jobId && q.flagCreatedAt === flagCreatedAt)) return;
+  distillQueue.push({ jobId, flagCreatedAt });
+  void drainDistillQueue();
+}
+
+async function drainDistillQueue() {
+  if (distillDraining) return;
+  distillDraining = true;
+  try {
+    while (distillQueue.length > 0) {
+      await runDistillation(distillQueue[0]);
+      distillQueue.shift();
+    }
+  } finally {
+    distillDraining = false;
+  }
+}
+
+async function runDistillation({ jobId, flagCreatedAt }: { jobId: string; flagCreatedAt: string }) {
+  try {
+    const job = store.get(jobId);
+    const flag = job?.flags?.find((f) => f.createdAt === flagCreatedAt);
+    if (!job?.result || !flag || flag.assessment) return;
+    const frameworks = loadFrameworks();
+    const framework =
+      frameworks.get(job.result.frameworkId) ?? frameworks.get(pickDefaultFrameworkId(frameworks))!;
+    const verdict = await distillLesson({
+      finding: flag.finding,
+      section: flag.section,
+      note: flag.note,
+      transcript: job.result.transcript,
+      framework,
+    });
+    if (verdict.lesson) {
+      lessonStore.propose({
+        frameworkId: framework.id,
+        text: verdict.lesson,
+        rationale: verdict.rationale,
+        sourceReviewId: job.id,
+        sourceFindingPoint: flag.finding.point,
+        ...(flag.note ? { sourceNote: flag.note } : {}),
+      });
+    }
+    // Re-read before stamping — the job may have changed while the model ran.
+    const fresh = store.get(jobId);
+    if (!fresh?.flags) return;
+    const assessment: FindingFlag["assessment"] = verdict.lesson ? "lesson_proposed" : "no_lesson";
+    const stamped = fresh.flags.map((f) =>
+      f.createdAt === flagCreatedAt ? { ...f, assessment } : f,
+    );
+    store.update(jobId, { flags: stamped });
+  } catch (err) {
+    console.error(`Distillation for review ${jobId} failed; flag stays unprocessed:`, err);
+  }
+}
+
+// Boot sweep: retry flags a restart left unprocessed (idempotent — one model
+// call per unprocessed flag at most).
+for (const job of store.list()) {
+  for (const flag of job.flags ?? []) {
+    if (!flag.assessment) enqueueDistillation(job.id, flag.createdAt);
   }
 }
 

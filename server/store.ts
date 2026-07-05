@@ -16,6 +16,18 @@ export interface CoachFeedback {
   updatedAt: string;
 }
 
+export interface FindingFlag {
+  section: "whatWentRight" | "whatWentWrong";
+  index: number;
+  /** Snapshot at flag time — re-analysis may replace the findings array. */
+  finding: { point: string; detail: string; quote: string; timestamp: string };
+  note?: string;
+  repId?: string;
+  createdAt: string;
+  /** Absent until the distiller has processed this flag. */
+  assessment?: "lesson_proposed" | "no_lesson";
+}
+
 export interface ReviewJob {
   id: string;
   filename: string;
@@ -37,6 +49,8 @@ export interface ReviewJob {
   clientAudioFile?: string;
   /** Set when the report was re-scored from its stored transcript. */
   reanalyzedAt?: string;
+  /** Rep "this is inaccurate" flags on findings, processed by the distiller. */
+  flags?: FindingFlag[];
   coach?: CoachFeedback;
   error?: string;
   result?: CallReviewResult;
