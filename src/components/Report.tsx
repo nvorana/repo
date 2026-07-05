@@ -389,7 +389,7 @@ function ImpactChip({ impact, tone }: { impact?: string; tone: "good" | "bad" })
 function FlagLink({ onFlag }: { onFlag: (note: string) => Promise<void> }) {
   const [state, setState] = useState<"idle" | "note" | "sending" | "done" | "error">("idle");
   const [note, setNote] = useState("");
-  if (state === "done") return <p className="mt-1 text-xs opacity-50">Flagged ✓ — thanks, noted.</p>;
+  if (state === "done") return <p className="print-hide mt-1 text-xs opacity-50">Flagged ✓ — thanks, noted.</p>;
   if (state === "idle") {
     return (
       <button
