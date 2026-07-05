@@ -151,7 +151,7 @@ ${
   framework.lessons?.length
     ? `
 LEARNED CALIBRATIONS — corrections distilled from past reviews the coach has
-approved. Apply them when judging this call:
+approved. They override your default judgment when they conflict:
 ${framework.lessons.map((l) => `- ${l}`).join("\n")}
 `
     : ""

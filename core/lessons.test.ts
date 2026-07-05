@@ -29,9 +29,13 @@ const finding = {
 function fakeClient(response: object | "throw"): Anthropic {
   return {
     messages: {
-      create: async () => {
+      stream: () => {
         if (response === "throw") throw new Error("model unavailable");
-        return { content: [{ type: "text", text: JSON.stringify(response) }] };
+        return {
+          finalMessage: async () => ({
+            content: [{ type: "text", text: JSON.stringify(response) }],
+          }),
+        };
       },
     },
   } as unknown as Anthropic;
