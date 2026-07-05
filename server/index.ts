@@ -453,7 +453,21 @@ app.get("/api/reviews/:id", (req, res) => {
   } else if (!managerCanSee(job, user)) {
     return res.status(404).json({ error: "Review not found" });
   }
-  res.json({ ...job, released, mixedAudio: isMixedAudio(job) });
+  // Reps get only the fields needed to render "Flagged ✓" — never a flag's
+  // finding snapshot, the coach's note, or who placed it. Managers own the full data.
+  const payload =
+    roleOf(req) === "rep" && job.flags
+      ? {
+          ...job,
+          flags: job.flags.map((f) => ({
+            section: f.section,
+            index: f.index,
+            createdAt: f.createdAt,
+            assessment: f.assessment,
+          })),
+        }
+      : job;
+  res.json({ ...payload, released, mixedAudio: isMixedAudio(job) });
 });
 
 app.post("/api/reviews/:id/reanalyze", requireManager, (req, res) => {
