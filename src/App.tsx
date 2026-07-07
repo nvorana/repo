@@ -23,6 +23,7 @@ import { UsersAdmin } from "./components/UsersAdmin.tsx";
 import { Reports } from "./components/Reports.tsx";
 import { ChatBubble } from "./components/ChatBubble.tsx";
 import { SupportInbox } from "./components/SupportInbox.tsx";
+import { TeamCoachingHome } from "./components/TeamCoachingHome.tsx";
 
 const POLL_MS = 4000;
 type ManagerTab = "team" | "mine" | "reports" | "people";
@@ -423,20 +424,15 @@ function ManagerHome({
     <div className="space-y-6">
       <SupportInbox />
       <LessonsPanel />
-      <section>
-        <h1 className="mb-1 text-2xl font-bold">Team coaching</h1>
-        <p className="opacity-60">
-          {queue.length > 0
-            ? `${queue.length} call${queue.length === 1 ? "" : "s"} waiting for your review.`
-            : "All caught up — no calls waiting for coaching."}
-        </p>
-      </section>
 
-      <TeamSummary reviews={reviews} />
-      <RepDashboard reviews={reviews} />
+      <TeamCoachingHome
+        reviews={reviews}
+        onSelect={onSelect}
+        onJumpToQueue={() => document.getElementById("coach-queue")?.scrollIntoView({ behavior: "smooth" })}
+      />
 
       {queue.length > 0 && (
-        <div className="collapse-arrow collapse rounded-box border border-base-300 bg-base-100">
+        <div id="coach-queue" className="collapse-arrow collapse rounded-box border border-base-300 bg-base-100">
           <input type="checkbox" />
           <div className="collapse-title font-semibold">
             Needs your coaching <span className="badge badge-warning badge-sm">{queue.length}</span>
@@ -714,87 +710,6 @@ function computeRepStats(reviews: ReviewSummary[]): RepStats[] {
       };
     })
     .sort((a, b) => priority(a) - priority(b) || a.avgScore - b.avgScore);
-}
-
-function TeamSummary({ reviews }: { reviews: ReviewSummary[] }) {
-  const stats = computeRepStats(reviews);
-  if (stats.length === 0) return null;
-  const trendOf = (s: RepStats) => (s.calls > 1 ? s.lastScore - s.avgScore : 0);
-  const slipping = stats.filter((s) => trendOf(s) < -0.2);
-  const improving = stats.filter((s) => trendOf(s) > 0.2).length;
-  const steady = stats.length - slipping.length - improving;
-  const teamAvg = stats.reduce((a, s) => a + s.avgScore, 0) / stats.length;
-  const worst = slipping[0] ?? stats[0];
-
-  return (
-    <section className="rounded-box border border-warning/30 bg-warning/5 p-4">
-      <h2 className="text-lg font-bold">Team performance</h2>
-      <p className="text-sm opacity-60">Where everyone stands at a glance.</p>
-      <div className="stats stats-horizontal mt-3 w-full overflow-x-auto bg-base-100 shadow-sm">
-        <div className="stat py-3"><div className="stat-title text-xs">Team avg /10</div><div className="stat-value text-2xl">{teamAvg.toFixed(1)}</div></div>
-        <div className="stat py-3"><div className="stat-title text-xs">Active reps</div><div className="stat-value text-2xl">{stats.length}</div></div>
-        <div className="stat py-3"><div className="stat-title text-xs">Slipping</div><div className="stat-value text-2xl text-error">{slipping.length}</div></div>
-        <div className="stat py-3"><div className="stat-title text-xs">Steady</div><div className="stat-value text-2xl opacity-70">{steady}</div></div>
-        <div className="stat py-3"><div className="stat-title text-xs">Improving</div><div className="stat-value text-2xl text-success">{improving}</div></div>
-      </div>
-      {worst && trendOf(worst) < -0.2 && (
-        <div className="mt-3 rounded-box border-l-4 border-error bg-error/10 p-3 text-sm">
-          <span className="font-semibold text-error">Needs attention: </span>
-          {worst.rep} is slipping ({worst.avgScore.toFixed(1)})
-          {worst.weakest ? ` — weakest skill: ${worst.weakest.name}.` : "."}
-        </div>
-      )}
-    </section>
-  );
-}
-
-function RepDashboard({ reviews }: { reviews: ReviewSummary[] }) {
-  const stats = computeRepStats(reviews);
-  if (stats.length === 0) return null;
-  return (
-    <section>
-      <h2 className="mb-1 text-lg font-semibold">By salesperson</h2>
-      <p className="mb-3 text-sm opacity-60">
-        Where each rep stands across their reviewed calls — and the single skill to coach next.
-      </p>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {stats.map((s) => {
-          const trend = s.lastScore - s.avgScore;
-          return (
-            <div key={s.rep} className="card bg-base-200 shadow-sm">
-              <div className="card-body p-4">
-                <div className="flex items-baseline justify-between gap-2">
-                  <span className="truncate font-semibold">{s.rep}</span>
-                  <span className="text-xs opacity-50">
-                    {s.calls} call{s.calls === 1 ? "" : "s"}
-                  </span>
-                </div>
-                <div className="flex items-end gap-3">
-                  <span className="text-3xl font-bold">{s.avgScore.toFixed(1)}</span>
-                  <span className="pb-1 text-xs opacity-60">avg / 10</span>
-                  {s.calls > 1 && (
-                    <span
-                      className={`pb-1 text-xs ${
-                        trend > 0.2 ? "text-success" : trend < -0.2 ? "text-error" : "opacity-50"
-                      }`}
-                    >
-                      {trend > 0.2 ? "↑ improving" : trend < -0.2 ? "↓ slipping" : "→ steady"}
-                    </span>
-                  )}
-                </div>
-                {s.weakest && (
-                  <div className="mt-1 rounded-box bg-base-300/60 p-2.5 text-xs">
-                    <span className="font-semibold text-warning">Coach next: </span>
-                    {s.weakest.name} (avg {s.weakest.avg.toFixed(1)}/5)
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </section>
-  );
 }
 
 function ScoreCircle({ className, children }: { className: string; children: ReactNode }) {
