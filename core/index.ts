@@ -17,6 +17,14 @@ export type { AnalyzerOptions } from "./analyzer.ts";
 
 export { distillLesson, type DistillInput, type DistillResult } from "./lessons.ts";
 
+export {
+  answerSupport,
+  type SupportInput,
+  type SupportResult,
+  type SupportMessage,
+  type SupportOptions,
+} from "./support.ts";
+
 export { computeDeliveryMetrics, formatTimestamp } from "./metrics.ts";
 export { anchorReviewTimestamps, locateQuoteMs } from "./anchor.ts";
 export { verifyReviewClaims, quoteAppears } from "./verify.ts";
