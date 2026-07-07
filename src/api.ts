@@ -296,3 +296,40 @@ export const STATUS_LABELS: Record<JobStatus, string> = {
 export function isInProgress(status: JobStatus): boolean {
   return status !== "completed" && status !== "failed";
 }
+
+// --- Support chat -----------------------------------------------------------
+
+export interface SupportTicket {
+  id: string;
+  userId?: string;
+  userName?: string;
+  page: string;
+  userAgent: string;
+  messages: { role: "user" | "assistant"; content: string }[];
+  aiSummary: string;
+  status: "open" | "resolved";
+  createdAt: string;
+  resolvedAt?: string;
+}
+
+export async function sendSupportChat(body: {
+  messages: { role: "user" | "assistant"; content: string }[];
+  page: string;
+  ticketId?: string;
+}): Promise<{ reply: string; escalated: boolean; ticketId?: string }> {
+  const res = await api("/api/support/chat", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return json(res);
+}
+
+export function listSupportTickets(): Promise<SupportTicket[]> {
+  return api("/api/support/tickets").then((r) => json<SupportTicket[]>(r));
+}
+
+export async function resolveSupportTicket(id: string): Promise<SupportTicket> {
+  const res = await api(`/api/support/tickets/${id}/resolve`, { method: "POST" });
+  return json<SupportTicket>(res);
+}

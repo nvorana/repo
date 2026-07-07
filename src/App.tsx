@@ -21,6 +21,8 @@ import { Report } from "./components/Report.tsx";
 import { LessonsPanel } from "./components/Lessons.tsx";
 import { UsersAdmin } from "./components/UsersAdmin.tsx";
 import { Reports } from "./components/Reports.tsx";
+import { ChatBubble } from "./components/ChatBubble.tsx";
+import { SupportInbox } from "./components/SupportInbox.tsx";
 
 const POLL_MS = 4000;
 type ManagerTab = "team" | "mine" | "reports" | "people";
@@ -204,6 +206,7 @@ export default function App() {
           <ManagerHome reviews={teamReviews} onSelect={setSelectedId} />
         )}
       </main>
+      <ChatBubble />
     </div>
   );
 }
@@ -418,6 +421,7 @@ function ManagerHome({
 
   return (
     <div className="space-y-6">
+      <SupportInbox />
       <LessonsPanel />
       <section>
         <h1 className="mb-1 text-2xl font-bold">Team coaching</h1>
