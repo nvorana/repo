@@ -46,6 +46,15 @@ describe("answerSupport", () => {
     expect(out.ticketSummary).toBeNull();
   });
 
+  it("falls back to a generic ticket summary when escalating with no summary", async () => {
+    const out = await answerSupport(
+      { messages: [{ role: "user", content: "weird glitch" }], helpNotes },
+      { client: fakeClient({ reply: "I've logged this.", resolved: false, ticketSummary: "" }) },
+    );
+    expect(out.ticketSummary).toBe("Unspecified issue");
+    expect(out.resolved).toBe(false);
+  });
+
   it("propagates model errors", async () => {
     await expect(
       answerSupport({ messages: [{ role: "user", content: "x" }], helpNotes }, { client: fakeClient("throw") }),
