@@ -5,6 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  answerSupport,
   AssemblyAIProvider,
   defaultFramework,
   distillLesson,
@@ -13,8 +14,10 @@ import {
   reviewCall,
   reviewCallFromTracks,
   type SalesFramework,
+  type SupportMessage,
 } from "../core/index.ts";
 import { ReviewStore, type FindingFlag } from "./store.ts";
+import { SupportStore } from "./support.ts";
 import { LessonStore } from "./lessons.ts";
 import { UserStore, toPublic, type Role, type User } from "./users.ts";
 import {
@@ -31,6 +34,20 @@ const AVATAR_DIR = process.env.AVATAR_DIR ?? path.join(DATA_DIR, "..", "avatars"
 const USERS_FILE = process.env.USERS_FILE ?? path.join(DATA_DIR, "..", "users.json");
 const FRAMEWORKS_DIR = path.join(__dirname, "frameworks");
 const MAX_UPLOAD_MB = 250;
+
+const HELP_FILE = path.join(__dirname, "support", "help.md");
+const supportStore = new SupportStore(path.join(DATA_DIR, "support"));
+const SUPPORT_MAX_MESSAGES = 20;
+const SUPPORT_MAX_CHARS = 2000;
+
+function loadHelpNotes(): string {
+  try {
+    return fs.existsSync(HELP_FILE) ? fs.readFileSync(HELP_FILE, "utf8") : "";
+  } catch (err) {
+    console.error("Could not read support help notes:", err);
+    return "";
+  }
+}
 
 // --- Framework registry ----------------------------------------------------
 // Drop a markdown file in server/frameworks/ to add your own methodology.
@@ -561,6 +578,73 @@ app.post("/api/reanalyze/mine", requireManager, (req, res) => {
   let queued = 0;
   for (const j of own) if (enqueueReanalysis(j.id)) queued++;
   res.status(202).json({ queued });
+});
+
+// --- Support chat + inbox ----------------------------------------------------
+// Any logged-in user (open in open mode) can chat with the help assistant. It
+// answers from help.md; anything it can't resolve becomes a ticket in the
+// manager inbox. The catch path still files a ticket so a user is never left
+// at a dead end.
+app.post("/api/support/chat", async (req, res) => {
+  const { messages, page, ticketId } = req.body as {
+    messages?: SupportMessage[];
+    page?: string;
+    ticketId?: string;
+  };
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return res.status(400).json({ error: "Say something first." });
+  }
+  if (messages.length > SUPPORT_MAX_MESSAGES) {
+    return res.status(400).json({ error: "This chat is too long — start a new one." });
+  }
+  if (messages.some((m) => typeof m.content !== "string" || m.content.length > SUPPORT_MAX_CHARS)) {
+    return res.status(400).json({ error: "Message too long." });
+  }
+  const user = currentUser(req);
+  const pagePath = typeof page === "string" ? page.slice(0, 200) : "unknown";
+  const userAgent = String(req.headers["user-agent"] ?? "unknown").slice(0, 300);
+
+  const fileTicket = (aiSummary: string) => {
+    if (ticketId && supportStore.get(ticketId)) {
+      const last = messages[messages.length - 1];
+      return supportStore.append(ticketId, last ? [last] : []).id;
+    }
+    return supportStore.create({
+      ...(user ? { userId: user.id, userName: user.name } : {}),
+      page: pagePath,
+      userAgent,
+      messages,
+      aiSummary,
+    }).id;
+  };
+
+  try {
+    const result = await answerSupport({ messages, helpNotes: loadHelpNotes() });
+    if (result.resolved) return res.json({ reply: result.reply, escalated: false });
+    const id = fileTicket(result.ticketSummary ?? "Unspecified issue");
+    return res.json({ reply: result.reply, escalated: true, ticketId: id });
+  } catch (err) {
+    console.error("Support chat failed; filing a ticket anyway:", err);
+    const id = fileTicket("(AI unavailable)");
+    return res.json({
+      reply:
+        "I couldn't reach support AI just now, but I've logged your message and the team will follow up.",
+      escalated: true,
+      ticketId: id,
+    });
+  }
+});
+
+app.get("/api/support/tickets", requireManager, (_req, res) => {
+  res.json(supportStore.list());
+});
+
+app.post("/api/support/tickets/:id/resolve", requireManager, (req, res) => {
+  try {
+    res.json(supportStore.resolve(String(req.params.id)));
+  } catch {
+    res.status(404).json({ error: "Ticket not found" });
+  }
 });
 
 app.post("/api/reviews", upload.fields([{ name: "audio", maxCount: 1 }, { name: "repAudio", maxCount: 1 }, { name: "clientAudio", maxCount: 1 }]), (req, res) => {
