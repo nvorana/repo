@@ -597,17 +597,32 @@ app.post("/api/support/chat", async (req, res) => {
   if (messages.length > SUPPORT_MAX_MESSAGES) {
     return res.status(400).json({ error: "This chat is too long — start a new one." });
   }
-  if (messages.some((m) => typeof m.content !== "string" || m.content.length > SUPPORT_MAX_CHARS)) {
-    return res.status(400).json({ error: "Message too long." });
+  // Validate every element up front: a null/primitive/bad-role element would
+  // otherwise throw on m.content inside the model call and surface as a 500,
+  // and an unvalidated role is a ticket-spam vector.
+  const validShape = messages.every(
+    (m) =>
+      m &&
+      typeof m === "object" &&
+      (m.role === "user" || m.role === "assistant") &&
+      typeof m.content === "string" &&
+      m.content.length <= SUPPORT_MAX_CHARS,
+  );
+  if (!validShape) {
+    return res.status(400).json({ error: "Message too long or malformed." });
   }
   const user = currentUser(req);
   const pagePath = typeof page === "string" ? page.slice(0, 200) : "unknown";
   const userAgent = String(req.headers["user-agent"] ?? "unknown").slice(0, 300);
 
+  // Only append to an existing ticket the caller owns; a mismatched, foreign,
+  // or leaked ticketId falls through to creating a fresh ticket. In open mode
+  // both sides are undefined, which correctly allows the append.
   const fileTicket = (aiSummary: string) => {
-    if (ticketId && supportStore.get(ticketId)) {
+    const existing = ticketId ? supportStore.get(ticketId) : null;
+    if (existing && existing.userId === user?.id) {
       const last = messages[messages.length - 1];
-      return supportStore.append(ticketId, last ? [last] : []).id;
+      return supportStore.append(ticketId!, last ? [last] : []).id;
     }
     return supportStore.create({
       ...(user ? { userId: user.id, userName: user.name } : {}),
