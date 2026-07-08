@@ -63,49 +63,39 @@ export function Report({
 
   // Lock the two per-participant tracks to one shared timeline: play, pause, or
   // scrub either player and the other follows. Volume stays independent so you
-  // can lower one side. A single `syncing` guard stops the mirror from echoing.
+  // can lower one side. Every mirror is IDEMPOTENT — it only acts when the other
+  // player actually needs it (already playing → don't re-play; already aligned →
+  // don't re-seek). That's what stops the two players echoing each other into a
+  // seek storm. (No continuous drift-correction — it fed that loop.)
   useEffect(() => {
     if (!separateTracks) return;
     const a = repAudioRef.current;
     const b = clientAudioRef.current;
     if (!a || !b) return;
-    let syncing = false;
-    const run = (fn: () => void) => {
-      if (syncing) return;
-      syncing = true;
-      try {
-        fn();
-      } finally {
-        syncing = false;
-      }
-    };
+    const ALIGN = 0.2; // seconds; below this the tracks count as in sync
     const link = (src: HTMLAudioElement, dst: HTMLAudioElement) => {
-      const onPlay = () => run(() => {
-        dst.currentTime = src.currentTime;
-        void dst.play();
-      });
-      const onPause = () => run(() => dst.pause());
-      const onSeeking = () => run(() => {
-        dst.currentTime = src.currentTime;
-      });
-      const onTime = () => {
-        // Gently correct natural drift while playing, without fighting a scrub.
-        if (syncing || src.paused || dst.seeking) return;
-        if (Math.abs(dst.currentTime - src.currentTime) > 0.35) {
-          run(() => {
-            dst.currentTime = src.currentTime;
-          });
+      const align = () => {
+        if (Math.abs(dst.currentTime - src.currentTime) > ALIGN) {
+          dst.currentTime = src.currentTime;
         }
       };
+      const onPlay = () => {
+        align();
+        if (dst.paused) void dst.play().catch(() => {});
+      };
+      const onPause = () => {
+        if (!dst.paused) dst.pause();
+      };
+      const onSeek = () => align();
       src.addEventListener("play", onPlay);
       src.addEventListener("pause", onPause);
-      src.addEventListener("seeking", onSeeking);
-      src.addEventListener("timeupdate", onTime);
+      src.addEventListener("seeking", onSeek);
+      src.addEventListener("seeked", onSeek);
       return () => {
         src.removeEventListener("play", onPlay);
         src.removeEventListener("pause", onPause);
-        src.removeEventListener("seeking", onSeeking);
-        src.removeEventListener("timeupdate", onTime);
+        src.removeEventListener("seeking", onSeek);
+        src.removeEventListener("seeked", onSeek);
       };
     };
     const unlinkA = link(a, b);
