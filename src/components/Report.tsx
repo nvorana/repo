@@ -1,4 +1,4 @@
-import { useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type {
   CallReview,
   CallReviewResult,
@@ -61,6 +61,61 @@ export function Report({
   }
   const onSeek = hasAudio ? seek : undefined;
 
+  // Lock the two per-participant tracks to one shared timeline: play, pause, or
+  // scrub either player and the other follows. Volume stays independent so you
+  // can lower one side. A single `syncing` guard stops the mirror from echoing.
+  useEffect(() => {
+    if (!separateTracks) return;
+    const a = repAudioRef.current;
+    const b = clientAudioRef.current;
+    if (!a || !b) return;
+    let syncing = false;
+    const run = (fn: () => void) => {
+      if (syncing) return;
+      syncing = true;
+      try {
+        fn();
+      } finally {
+        syncing = false;
+      }
+    };
+    const link = (src: HTMLAudioElement, dst: HTMLAudioElement) => {
+      const onPlay = () => run(() => {
+        dst.currentTime = src.currentTime;
+        void dst.play();
+      });
+      const onPause = () => run(() => dst.pause());
+      const onSeeking = () => run(() => {
+        dst.currentTime = src.currentTime;
+      });
+      const onTime = () => {
+        // Gently correct natural drift while playing, without fighting a scrub.
+        if (syncing || src.paused || dst.seeking) return;
+        if (Math.abs(dst.currentTime - src.currentTime) > 0.35) {
+          run(() => {
+            dst.currentTime = src.currentTime;
+          });
+        }
+      };
+      src.addEventListener("play", onPlay);
+      src.addEventListener("pause", onPause);
+      src.addEventListener("seeking", onSeeking);
+      src.addEventListener("timeupdate", onTime);
+      return () => {
+        src.removeEventListener("play", onPlay);
+        src.removeEventListener("pause", onPause);
+        src.removeEventListener("seeking", onSeeking);
+        src.removeEventListener("timeupdate", onTime);
+      };
+    };
+    const unlinkA = link(a, b);
+    const unlinkB = link(b, a);
+    return () => {
+      unlinkA();
+      unlinkB();
+    };
+  }, [separateTracks, reviewId]);
+
   return (
     <div className="space-y-5">
       {mixedAudio && (
@@ -118,6 +173,7 @@ export function Report({
           )}
           <p className="px-1 text-xs opacity-50">
             Tip: click any ▶ timestamp anywhere in the report to hear that exact moment.
+            {separateTracks && " The two tracks stay in sync — play or scrub either one and the other follows."}
           </p>
         </div>
       )}
