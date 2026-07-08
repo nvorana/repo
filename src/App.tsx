@@ -420,6 +420,13 @@ function ManagerHome({
   const queue = reviews.filter((r) => r.status === "completed" && !r.coachReviewed);
   const reps = [...new Set(reviews.map((r) => r.rep).filter((r): r is string => Boolean(r)))].sort();
 
+  // One person filter for the whole page — narrows BOTH lists below at once.
+  const [repFilter, setRepFilter] = useState("");
+  const byRep = (list: ReviewSummary[]) =>
+    repFilter ? list.filter((r) => r.rep === repFilter) : list;
+  const shownQueue = byRep(queue);
+  const shownReviews = byRep(reviews);
+
   return (
     <div className="space-y-6">
       <SupportInbox />
@@ -431,14 +438,37 @@ function ManagerHome({
         onJumpToQueue={() => document.getElementById("coach-queue")?.scrollIntoView({ behavior: "smooth" })}
       />
 
-      {queue.length > 0 && (
+      {reps.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-medium opacity-70">Show calls for:</span>
+          <select
+            value={repFilter}
+            onChange={(e) => setRepFilter(e.target.value)}
+            className="select select-bordered select-sm"
+          >
+            <option value="">Everyone</option>
+            {reps.map((r) => (
+              <option key={r} value={r}>
+                {r}
+              </option>
+            ))}
+          </select>
+          {repFilter && (
+            <button className="btn btn-ghost btn-xs" onClick={() => setRepFilter("")}>
+              Clear
+            </button>
+          )}
+        </div>
+      )}
+
+      {shownQueue.length > 0 && (
         <div id="coach-queue" className="collapse-arrow collapse rounded-box border border-base-300 bg-base-100">
           <input type="checkbox" />
           <div className="collapse-title font-semibold">
-            Needs your coaching <span className="badge badge-warning badge-sm">{queue.length}</span>
+            Needs your coaching <span className="badge badge-warning badge-sm">{shownQueue.length}</span>
           </div>
           <div className="collapse-content">
-            <ReviewBrowser reviews={queue} onSelect={onSelect} showRep reps={reps} />
+            <ReviewBrowser reviews={shownQueue} onSelect={onSelect} showRep />
           </div>
         </div>
       )}
@@ -446,10 +476,10 @@ function ManagerHome({
       <div className="collapse-arrow collapse rounded-box border border-base-300 bg-base-100">
         <input type="checkbox" />
         <div className="collapse-title font-semibold">
-          All reviews <span className="opacity-50">({reviews.length})</span>
+          All reviews <span className="opacity-50">({shownReviews.length})</span>
         </div>
         <div className="collapse-content">
-          <ReviewBrowser reviews={reviews} onSelect={onSelect} showRep reps={reps} statusFilter />
+          <ReviewBrowser reviews={shownReviews} onSelect={onSelect} showRep statusFilter />
         </div>
       </div>
     </div>
