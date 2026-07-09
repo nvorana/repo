@@ -140,6 +140,7 @@ export function Report({
       {hasAudio && (
         <div
           className="print-hide sticky top-0 z-10 -mx-2 space-y-2 rounded-box bg-base-100/95 p-2 backdrop-blur"
+          tabIndex={0}
           onKeyDown={(e) => {
             // Only when focus is on a skip button / the region — never fight the
             // native player's own arrow keys, and never hijack the page.
