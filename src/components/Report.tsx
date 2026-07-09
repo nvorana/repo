@@ -9,6 +9,7 @@ import type {
   Transcript,
 } from "../../core/types.ts";
 import { audioUrl, flagFinding, type FindingFlag } from "../api.ts";
+import { clampSkip } from "../lib/audio.ts";
 
 type Tab = "summary" | "winsmisses" | "objections" | "delivery" | "scorecard" | "coaching" | "transcript";
 
@@ -60,6 +61,17 @@ export function Report({
     repAudioRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }
   const onSeek = hasAudio ? seek : undefined;
+
+  // Nudge playback by ±delta seconds. The two-track players are sync-locked
+  // (below), so moving both to the same clamped time keeps them aligned.
+  function skip(delta: number) {
+    const primary = repAudioRef.current;
+    if (!primary) return;
+    const target = clampSkip(primary.currentTime, delta, primary.duration);
+    for (const el of [repAudioRef.current, clientAudioRef.current]) {
+      if (el) el.currentTime = target;
+    }
+  }
 
   // Lock the two per-participant tracks to one shared timeline: play, pause, or
   // scrub either player and the other follows. Volume stays independent so you
@@ -126,7 +138,21 @@ export function Report({
         </div>
       )}
       {hasAudio && (
-        <div className="print-hide sticky top-0 z-10 -mx-2 space-y-2 rounded-box bg-base-100/95 p-2 backdrop-blur">
+        <div
+          className="print-hide sticky top-0 z-10 -mx-2 space-y-2 rounded-box bg-base-100/95 p-2 backdrop-blur"
+          onKeyDown={(e) => {
+            // Only when focus is on a skip button / the region — never fight the
+            // native player's own arrow keys, and never hijack the page.
+            if (e.target instanceof HTMLMediaElement) return;
+            if (e.key === "ArrowLeft") {
+              e.preventDefault();
+              skip(-5);
+            } else if (e.key === "ArrowRight") {
+              e.preventDefault();
+              skip(5);
+            }
+          }}
+        >
           {separateTracks ? (
             <div className="grid gap-2 sm:grid-cols-2">
               <div>
@@ -161,8 +187,23 @@ export function Report({
               className="w-full"
             />
           )}
+          <div className="flex items-center justify-center gap-1.5">
+            <button type="button" className="btn btn-ghost btn-xs" onClick={() => skip(-10)} aria-label="Back 10 seconds">
+              ⏪ 10s
+            </button>
+            <button type="button" className="btn btn-ghost btn-xs" onClick={() => skip(-5)} aria-label="Back 5 seconds">
+              ◀ 5s
+            </button>
+            <button type="button" className="btn btn-ghost btn-xs" onClick={() => skip(5)} aria-label="Forward 5 seconds">
+              5s ▶
+            </button>
+            <button type="button" className="btn btn-ghost btn-xs" onClick={() => skip(10)} aria-label="Forward 10 seconds">
+              10s ⏩
+            </button>
+          </div>
           <p className="px-1 text-xs opacity-50">
-            Tip: click any ▶ timestamp anywhere in the report to hear that exact moment.
+            Tip: click any ▶ timestamp anywhere in the report to hear that exact moment. Use the
+            skip buttons or ←/→ arrows to nudge back and forth.
             {separateTracks && " The two tracks stay in sync — play or scrub either one and the other follows."}
           </p>
         </div>
