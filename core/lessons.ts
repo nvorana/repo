@@ -5,7 +5,10 @@ import type { AnalyzerOptions } from "./analyzer.ts";
 import type { SalesFramework } from "./frameworks/types.ts";
 import type { Transcript } from "./types.ts";
 
-const MODEL = "claude-opus-4-8";
+// Judging a flag + drafting a lesson is strong-reasoning work but not the
+// crown-jewel review — Sonnet handles it well, and every lesson passes the
+// coach's Apply/Discard gate before it can shape a future review.
+const MODEL = "claude-sonnet-5";
 const LESSON_MAX_CHARS = 240;
 
 // A rep flagged a finding as inaccurate. Re-examine it skeptically against the
@@ -52,9 +55,12 @@ export async function distillLesson(
     .join("\n");
 
   // Long transcripts mean long input; stream to avoid request timeouts.
+  // Thinking off: Sonnet defaults to adaptive thinking, which would eat into the
+  // 1024-token cap and risk truncating the structured verdict.
   const stream = client.messages.stream({
     model,
     max_tokens: 1024,
+    thinking: { type: "disabled" },
     output_config: { format: zodOutputFormat(verdictSchema) },
     messages: [
       {

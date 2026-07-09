@@ -11,6 +11,10 @@ import { formatTimestamp } from "./metrics.ts";
 import type { SalesFramework } from "./frameworks/types.ts";
 
 const MODEL = "claude-opus-4-8";
+// Mapping A/B diarization labels to seller/prospect is a trivial classification,
+// so it runs on the cheapest tier. (Only reached on legacy single-file uploads —
+// two-track uploads already know each speaker's role and skip this entirely.)
+const SPEAKER_ID_MODEL = "claude-haiku-4-5";
 
 export interface AnalyzerOptions {
   client?: Anthropic;
@@ -46,7 +50,7 @@ export class CallAnalyzer {
     });
 
     const response = await this.client.messages.create({
-      model: this.model,
+      model: SPEAKER_ID_MODEL,
       max_tokens: 1024,
       output_config: { format: zodOutputFormat(schema) },
       messages: [
