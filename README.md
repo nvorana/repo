@@ -1,152 +1,41 @@
-# Interactive Form - Typeform-Inspired Web App
+# Atelier — Your AI Product Studio
 
-A modern, mobile-first web application with smooth animations and an engaging one-question-at-a-time flow, inspired by Typeform's user experience.
+A premium, immersive creative workspace for first-time entrepreneurs making their first digital product. Not a dashboard — an AI operating system you step into, where the journey **Idea → Research → Blueprint → Writing → Launch** unfolds as five distinct creative rooms.
 
-## Features
+## The experience
 
-- **One-Question-at-a-Time Flow**: Focused user experience that guides users through each question sequentially
-- **Smooth Animations**: Framer Motion-powered transitions that feel natural and engaging
-- **Mobile-First Design**: Optimized for mobile devices with touch-friendly interactions
-- **Progress Tracking**: Visual progress bar showing completion status
-- **Multiple Question Types**:
-  - Text input
-  - Email input
-  - Multiple choice (with instant selection)
-  - Textarea for long-form responses
-- **Keyboard Navigation**: Press Enter to advance through questions
-- **Responsive Design**: Works seamlessly on desktop, tablet, and mobile
-- **Beautiful Gradients**: Eye-catching color schemes that enhance the visual experience
+- **The Welcome** — a single quiet question: what will you make? One sentence is enough to enter the studio.
+- **The Spark Room (Idea)** — shape the idea into a one-liner you can hold, with clarity marks and three sharpening angles from the AI.
+- **The Observatory (Research)** — audience signals, the competitive landscape framed as *your opening*, and the five beliefs to verify before building.
+- **The Drafting Table (Blueprint)** — a reorderable chapter arc, three scope decisions (form, time, price), and the before/after promise in one glance.
+- **The Quiet Desk (Writing)** — a distraction-free serif editor. When the pen rests, Muse offers a thread to pull (accept with `Tab`). Work saves as you write.
+- **The Send-off (Launch)** — a readiness ring, launch broken into small finishable moves, and a day-one announcement already drafted.
 
-## Tech Stack
+## The companion
 
-- **React 18** - UI library
-- **TypeScript** - Type safety
-- **Vite** - Fast build tool and dev server
-- **Tailwind CSS** - Utility-first styling
-- **Framer Motion** - Smooth animations
+**Muse** is present in every room and intrusive in none. Closed, it is a breathing orb in the corner. Open, it is a glass panel that knows which room you are standing in — offering room-specific context, three quiet suggestions, and streamed conversational answers.
 
-## Getting Started
+## Design language
 
-### Prerequisites
+- Floating glass panels with hairline borders, soft depth, and generous rounding
+- Per-room ambient lighting that crossfades as you move between studios, over a grain-textured, vignetted dark stage
+- Inter Variable for the interface, Newsreader for display and long-form writing
+- A single calm iris accent; each room adds one soft tint (ember, tide, iris, ivory, moss)
+- `⌘K` command palette, `⇧F` focus mode, full keyboard navigation, reduced-motion support
+- All studio state persists locally — the studio remembers your work between visits
 
-- Node.js 16+ installed
-- npm or yarn package manager
+## Tech stack
 
-### Installation
+- React 19 + TypeScript + Vite
+- Tailwind CSS 4
+- Framer Motion for room transitions and micro-interactions
+- lucide-react icons, @fontsource typefaces
 
-1. Install dependencies:
+## Running it
+
 ```bash
 npm install
+npm run dev      # local development
+npm run build    # type-check + production build
+npm run preview  # serve the production build
 ```
-
-2. Start the development server:
-```bash
-npm run dev
-```
-
-3. Open your browser and navigate to the URL shown in the terminal (usually `http://localhost:5173`)
-
-### Building for Production
-
-```bash
-npm run build
-```
-
-The built files will be in the `dist` directory, ready to deploy to any static hosting service.
-
-## Customizing the Form
-
-### Adding/Modifying Questions
-
-Edit the `sampleQuestions` array in `src/App.tsx`:
-
-```typescript
-const sampleQuestions: Question[] = [
-  {
-    id: 'unique-id',
-    type: 'text', // 'text' | 'email' | 'choice' | 'textarea'
-    question: 'Your question here?',
-    placeholder: 'Optional placeholder',
-    required: true,
-    options: ['Option 1', 'Option 2'], // Only for type: 'choice'
-  },
-  // Add more questions...
-];
-```
-
-### Handling Form Submissions
-
-The `handleSubmit` function in `src/App.tsx` receives all answers when the form is completed:
-
-```typescript
-const handleSubmit = (answers: Record<string, string>) => {
-  console.log('Form submitted:', answers);
-
-  // Send to your backend
-  fetch('/api/submit', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(answers),
-  });
-};
-```
-
-### Customizing Colors
-
-Update the gradient colors in:
-- `src/components/FormContainer.tsx` - Main form background
-- `src/components/SuccessScreen.tsx` - Success screen background
-- `tailwind.config.js` - Global theme colors
-
-## Project Structure
-
-```
-src/
-├── components/
-│   ├── FormContainer.tsx      # Main form wrapper with state management
-│   ├── QuestionSlide.tsx      # Individual question component
-│   └── SuccessScreen.tsx      # Completion screen
-├── App.tsx                     # Main application component
-├── main.tsx                    # Application entry point
-└── index.css                   # Global styles with Tailwind
-```
-
-## Performance Considerations
-
-With 150-300 daily submissions, consider:
-
-1. **Backend Integration**: Set up a proper API endpoint to handle submissions
-2. **Database**: Use PostgreSQL, MongoDB, or a service like Supabase/Firebase
-3. **Analytics**: Track completion rates and drop-off points
-4. **Validation**: Add server-side validation for all inputs
-5. **Rate Limiting**: Prevent spam submissions
-6. **Error Handling**: Add retry logic for failed submissions
-
-## Mobile Optimization
-
-The app is optimized for mobile with:
-- Touch-friendly button sizes (minimum 44x44px)
-- Disabled pinch-to-zoom for app-like experience
-- Apple mobile web app meta tags
-- Responsive font sizes and spacing
-- Smooth touch interactions
-
-## Browser Support
-
-- Chrome/Edge (latest)
-- Firefox (latest)
-- Safari (latest)
-- Mobile browsers (iOS Safari, Chrome Mobile)
-
-## Next Steps
-
-1. Set up a backend API for form submissions
-2. Add database to store responses
-3. Create an admin dashboard to view submissions
-4. Add conditional logic (skip questions based on answers)
-5. Implement form analytics
-6. Add multi-language support
-
-## License
-
-MIT

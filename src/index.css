@@ -1,23 +1,203 @@
-@import "tailwindcss";
+@import '@fontsource-variable/inter';
+@import '@fontsource/newsreader/400.css';
+@import '@fontsource/newsreader/500.css';
+@import '@fontsource/newsreader/400-italic.css';
+@import '@fontsource/newsreader/500-italic.css';
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'Inter Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-serif: 'Newsreader', 'Iowan Old Style', Georgia, serif;
+
+  /* Ink — the room itself */
+  --color-ink-950: #08090c;
+  --color-ink-900: #0a0b0e;
+  --color-ink-850: #0e0f14;
+  --color-ink-800: #13141b;
+  --color-ink-700: #1b1d26;
+
+  /* Iris — the single, calm accent */
+  --color-iris-200: #cdccfa;
+  --color-iris-300: #b3b2f7;
+  --color-iris-400: #9b9af5;
+  --color-iris-500: #7b79ee;
+  --color-iris-600: #605ed6;
+
+  /* Studio tints — one soft hue per room */
+  --color-ember-300: #ecc9a4;
+  --color-ember-400: #e0b182;
+  --color-tide-300: #a8d8d4;
+  --color-tide-400: #8fc9c4;
+  --color-ivory-300: #eadbc0;
+  --color-ivory-400: #e0cba4;
+  --color-moss-300: #b8dcc2;
+  --color-moss-400: #a3d0b0;
+}
 
 * {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-html {
+html,
+body,
+#root {
   height: 100%;
 }
 
 body {
-  height: 100%;
   margin: 0;
-  overflow-x: hidden;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  overflow: hidden;
+  background: var(--color-ink-900);
+  color: #ededf0;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  letter-spacing: -0.011em;
 }
 
-#root {
-  height: 100%;
+::selection {
+  background: rgba(123, 121, 238, 0.32);
+}
+
+/* ---------- Surfaces ---------- */
+
+.glass {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.052), rgba(255, 255, 255, 0.024));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(28px) saturate(1.15);
+  -webkit-backdrop-filter: blur(28px) saturate(1.15);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.055),
+    0 28px 70px -30px rgba(0, 0, 0, 0.65);
+}
+
+.glass-soft {
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.065);
+}
+
+.glass-deep {
+  background: linear-gradient(180deg, rgba(16, 17, 23, 0.82), rgba(12, 13, 17, 0.86));
+  border: 1px solid rgba(255, 255, 255, 0.085);
+  backdrop-filter: blur(36px) saturate(1.2);
+  -webkit-backdrop-filter: blur(36px) saturate(1.2);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 40px 90px -30px rgba(0, 0, 0, 0.75);
+}
+
+.hairline {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+/* ---------- Typography helpers ---------- */
+
+.eyebrow {
+  font-size: 11px;
+  font-weight: 560;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(237, 237, 240, 0.42);
+}
+
+.serif-display {
+  font-family: var(--font-serif);
+  font-weight: 500;
+  letter-spacing: -0.015em;
+}
+
+/* ---------- Details ---------- */
+
+kbd.key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(237, 237, 240, 0.6);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.grain {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.32;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.28'/%3E%3C/svg%3E");
+}
+
+/* Quiet scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 99px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+input,
+textarea {
+  caret-color: var(--color-iris-400);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: rgba(237, 237, 240, 0.28);
+}
+
+button {
+  cursor: pointer;
+}
+
+/* Breathing presence for the companion orb */
+@keyframes breathe {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.85;
+  }
+  50% {
+    transform: scale(1.06);
+    opacity: 1;
+  }
+}
+.animate-breathe {
+  animation: breathe 4.5s ease-in-out infinite;
+}
+
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+.animate-blink {
+  animation: blink 1.1s step-end infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-breathe,
+  .animate-blink {
+    animation: none;
+  }
 }
