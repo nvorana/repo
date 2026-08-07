@@ -16,7 +16,7 @@ import {
   type SalesFramework,
   type SupportMessage,
 } from "../core/index.ts";
-import { ReviewStore, type FindingFlag } from "./store.ts";
+import { ReviewStore, type FindingFlag, type ReviewJob } from "./store.ts";
 import { SupportStore } from "./support.ts";
 import { LessonStore } from "./lessons.ts";
 import { UserStore, toPublic, type Role, type User } from "./users.ts";
@@ -357,6 +357,44 @@ app.get("/api/frameworks", (_req, res) => {
   );
 });
 
+// Delivery metrics are computed deterministically from word timings in
+// core/metrics.ts — there is no model judgment in them, so the rep who owns the
+// call sees them as soon as analysis finishes, without waiting for a release.
+function deliveryFields(result: ReviewJob["result"]) {
+  if (!result) return {};
+  const m = result.metrics;
+  return {
+    metrics: {
+      talkRatio: Math.round(m.salespersonTalkRatio * 100),
+      longPausesHeld: m.pauses.length,
+      fillerWords: m.fillerWordCounts.salesperson,
+      questionsAsked: m.questionCounts.salesperson,
+      interruptions: m.interruptions.length,
+    },
+  };
+}
+
+// Everything the MODEL concluded. Gated behind coach release for a rep.
+// NOTE: objectionRate belongs here, not in deliveryFields — it is derived from
+// review.objections[].handled, which is the model's judgment call, not a
+// measurement. Bundling it with the delivery metrics would leak a graded
+// verdict into the pre-release view.
+function judgmentFields(result: ReviewJob["result"]) {
+  if (!result) return {};
+  const objs = result.review.objections;
+  const handled = objs.filter((o) => o.handled === "handled").length;
+  return {
+    overallScore: result.review.overallScore,
+    summary: result.review.summary,
+    scorecard: result.review.scorecard.map(({ criterionId, criterionName, score }) => ({
+      criterionId,
+      criterionName,
+      score,
+    })),
+    objectionRate: objs.length ? Math.round((handled / objs.length) * 100) : null,
+  };
+}
+
 app.get("/api/reviews", (req, res) => {
   const user = currentUser(req);
   const asRep = roleOf(req) === "rep";
@@ -365,8 +403,9 @@ app.get("/api/reviews", (req, res) => {
     ? store.list().filter((job) => repOwns(job, user))
     : store.list().filter((job) => managerCanSee(job, user));
   // List view stays light: omit transcripts and report bodies, but include
-  // per-criterion scores so the UI can aggregate rep performance. Scores are
-  // withheld from reps on their own calls the coach hasn't released yet.
+  // per-criterion scores so the UI can aggregate rep performance. Model
+  // judgment is withheld from reps on their own calls the coach hasn't
+  // released yet; the measured delivery metrics are not.
   res.json(
     visible.map((job) => {
       const { id, filename, createdAt, callDate, status, rep, repId, client, error, result, coach } =
@@ -375,21 +414,14 @@ app.get("/api/reviews", (req, res) => {
       const base = {
         id, filename, createdAt, callDate, status, rep, repId, client, error, released,
         mixedAudio: isMixedAudio(job),
+        coachReviewed: coach?.reviewed ?? false,
+        ...deliveryFields(result),
       };
-      if (asRep && !repReleased(job)) {
-        return { ...base, coachReviewed: coach?.reviewed ?? false };
-      }
+      if (asRep && !repReleased(job)) return base;
       return {
         ...base,
-        coachReviewed: coach?.reviewed ?? false,
         hasCoachNotes: Boolean(coach?.notes),
-        overallScore: result?.review.overallScore,
-        summary: result?.review.summary,
-        scorecard: result?.review.scorecard.map(({ criterionId, criterionName, score }) => ({
-          criterionId,
-          criterionName,
-          score,
-        })),
+        ...judgmentFields(result),
       };
     }),
   );
@@ -460,12 +492,19 @@ app.get("/api/reviews/:id", (req, res) => {
     if (!repOwns(job, user)) return res.status(404).json({ error: "Review not found" });
     if (!repReleased(job)) {
       // Hide the report body, coach notes and flags until released — flag
-      // finding snapshots quote the hidden report verbatim.
+      // finding snapshots quote the hidden report verbatim. The measured
+      // delivery metrics ride alongside as a flat field rather than a partial
+      // `result`, so nothing downstream can mistake this for a full report.
       const { result: _r, coach: _c, flags: _f, ...rest } = job;
       void _r;
       void _c;
       void _f;
-      return res.json({ ...rest, released, mixedAudio: isMixedAudio(job) });
+      return res.json({
+        ...rest,
+        released,
+        mixedAudio: isMixedAudio(job),
+        ...deliveryFields(job.result),
+      });
     }
   } else if (!managerCanSee(job, user)) {
     return res.status(404).json({ error: "Review not found" });
@@ -1005,7 +1044,9 @@ app.use(
   },
 );
 
-app.listen(PORT, () => {
+// Exported so a harness that imports this module can shut the listener down
+// and exit cleanly (see scripts/verify-release-gate.ts). Unused in production.
+export const server = app.listen(PORT, () => {
   console.log(`Sales call review API listening on http://localhost:${PORT}`);
   console.log(
     `Storage: DATA_DIR=${DATA_DIR} AUDIO_DIR=${AUDIO_DIR} ` +

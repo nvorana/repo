@@ -41,6 +41,24 @@ export interface ReviewSummary {
   scorecard?: ScorecardScore[];
   /** True when the review was analyzed from one mixed file (guessed speakers). */
   mixedAudio?: boolean;
+  /**
+   * Measured from word timings, never by the model — present as soon as
+   * analysis finishes, including on calls the coach hasn't released yet.
+   */
+  metrics?: RepMetrics;
+  /**
+   * Share of objections the model judged handled. Model judgment, so it is
+   * absent until the coach releases the call.
+   */
+  objectionRate?: number | null;
+}
+
+export interface RepMetrics {
+  talkRatio: number;
+  longPausesHeld: number;
+  fillerWords: number;
+  questionsAsked: number;
+  interruptions: number;
 }
 
 export interface ReviewJob {
@@ -64,6 +82,12 @@ export interface ReviewJob {
   flags?: FindingFlag[];
   error?: string;
   result?: CallReviewResult;
+  /**
+   * Measured delivery numbers, sent flat (not inside `result`) on a call the
+   * coach hasn't released yet — the owner can see how they sounded before the
+   * model's verdict is unlocked.
+   */
+  metrics?: RepMetrics;
 }
 
 export async function deleteReview(id: string): Promise<void> {

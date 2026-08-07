@@ -24,6 +24,7 @@ import { Reports } from "./components/Reports.tsx";
 import { ChatBubble } from "./components/ChatBubble.tsx";
 import { SupportInbox } from "./components/SupportInbox.tsx";
 import { TeamCoachingHome } from "./components/TeamCoachingHome.tsx";
+import { RepProgress } from "./components/RepProgress.tsx";
 
 const POLL_MS = 4000;
 type ManagerTab = "team" | "mine" | "reports" | "people";
@@ -377,15 +378,13 @@ function RepHome({
               </div>
             </div>
           )}
-          {stats.weakest && (
-            <div className="stat">
-              <div className="stat-title text-warning">Focus this week</div>
-              <div className="stat-value text-base">{stats.weakest.name}</div>
-              <div className="stat-desc">lowest skill — avg {stats.weakest.avg.toFixed(1)}/5</div>
-            </div>
-          )}
         </section>
       )}
+
+      {/* Trend-first: what to change before the next call, derived across
+          recent calls. Replaces the old "lowest skill average" stat — two
+          different answers to "what should I focus on" would contradict. */}
+      <RepProgress reviews={reviews} rep={{ id: myId, name: myName }} />
 
       <section>
         <h2 className="mb-3 text-lg font-semibold">Upload a call</h2>
@@ -943,7 +942,7 @@ function DetailView({
           </div>
         </div>
       ) : job.status === "completed" && !job.result && !canCoach ? (
-        <PendingReleaseView client={job.client} />
+        <PendingReleaseView job={job} />
       ) : job.status !== "completed" || !job.result ? (
         <ProgressView job={job} />
       ) : (
@@ -1004,19 +1003,85 @@ function DetailView({
   );
 }
 
-function PendingReleaseView({ client }: { client?: string }) {
+function PendingReleaseView({ job }: { job: ReviewJob }) {
+  const m = job.metrics;
+  // Measured from audio timings, not judged by the model — so the owner sees
+  // these while the report itself is still with the coach.
+  const rows = m
+    ? [
+        { label: "Talk ratio", value: `${m.talkRatio}%`, target: "≤ 55%", ok: m.talkRatio <= 55 },
+        {
+          label: "Questions asked",
+          value: `${m.questionsAsked}`,
+          target: "≥ 12",
+          ok: m.questionsAsked >= 12,
+        },
+        { label: "Filler words", value: `${m.fillerWords}`, target: "≤ 5", ok: m.fillerWords <= 5 },
+        {
+          label: "Long pauses held",
+          value: `${m.longPausesHeld}`,
+          target: "≥ 3",
+          ok: m.longPausesHeld >= 3,
+        },
+        {
+          label: "Interruptions",
+          value: `${m.interruptions}`,
+          target: "≤ 3",
+          ok: m.interruptions <= 3,
+        },
+      ]
+    : [];
+
   return (
-    <div className="card bg-base-200">
-      <div className="card-body items-center py-12 text-center">
-        <div className="text-5xl">🔒</div>
-        <h2 className="mt-2 text-lg font-semibold">
-          Your coach is reviewing this call{client ? ` with ${client}` : ""}
-        </h2>
-        <p className="max-w-md text-sm opacity-60">
-          The AI review is done, but your sales head goes over it with you first. You'll see the full
-          report and feedback here right after your 1:1.
-        </p>
+    <div className="space-y-4">
+      <div className="card bg-base-200">
+        <div className="card-body items-center py-10 text-center">
+          <div className="text-5xl">🔒</div>
+          <h2 className="mt-2 text-lg font-semibold">
+            Your coach is reviewing this call{job.client ? ` with ${job.client}` : ""}
+          </h2>
+          <p className="max-w-md text-sm opacity-60">
+            The score and written feedback come from your sales head first — you'll see the full
+            report here right after your 1:1. In the meantime, here's how you sounded.
+          </p>
+        </div>
       </div>
+
+      {rows.length > 0 && (
+        <div className="card bg-base-100 shadow">
+          <div className="card-body">
+            <h3 className="card-title text-base">How you sounded</h3>
+            <p className="text-sm opacity-60">
+              Measured from the recording's timings — these aren't a grade, they're signals you can
+              act on before your next call.
+            </p>
+
+            {job.mixedAudio && (
+              <div className="alert alert-warning mt-2">
+                <span className="text-sm">
+                  This call was uploaded as one mixed recording, so who-spoke-when was estimated —
+                  <strong> talk ratio in particular may be well off</strong>. Upload your calls as
+                  two separate tracks (you and the client) for exact numbers.
+                </span>
+              </div>
+            )}
+
+            <div className="mt-2 overflow-x-auto">
+              <table className="table table-sm">
+                <tbody>
+                  {rows.map((r) => (
+                    <tr key={r.label}>
+                      <td className="font-medium">{r.label}</td>
+                      <td className={r.ok ? "text-success" : "text-warning"}>{r.value}</td>
+                      <td className="opacity-60">{r.target}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

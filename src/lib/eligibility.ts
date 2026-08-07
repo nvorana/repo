@@ -9,3 +9,16 @@ export function countsTowardTrends(r: {
 }): boolean {
   return r.status === "completed" && r.overallScore != null && r.mixedAudio === false;
 }
+
+// Metric trends have a different bar than score trends. A call the coach has
+// not released yet carries measured delivery numbers but no score, so it must
+// still move the rep's talk-ratio/filler/questions lines — that is the whole
+// point of showing facts before judgment. Same fail-safe on mixed audio: a
+// guessed-speaker call has an unreliable talk ratio and is excluded.
+export function countsTowardMetricTrends(r: {
+  status: string;
+  mixedAudio?: boolean;
+  metrics?: unknown;
+}): boolean {
+  return r.status === "completed" && r.mixedAudio === false && r.metrics != null;
+}
