@@ -938,6 +938,20 @@ async function runDistillation({
   }
 }
 
+// Move unreadable review files aside once, at boot. A truncated file can never
+// be recovered, and leaving it in place makes every later list request pay to
+// re-read and re-fail on it. (Production accumulated 33 of these, which flooded
+// the logs badly enough to stall request handling.)
+{
+  const moved = store.quarantineCorrupt();
+  if (moved > 0) {
+    console.warn(
+      `Quarantined ${moved} unreadable review file(s) to ${path.join(DATA_DIR, "corrupt")}. ` +
+        "Their reports are unrecoverable; the calls must be re-uploaded.",
+    );
+  }
+}
+
 // Boot sweep: retry flags a restart left unprocessed (idempotent — one model
 // call per unprocessed flag at most).
 for (const job of store.list()) {
