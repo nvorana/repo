@@ -168,6 +168,40 @@ export async function login(email: string, password: string): Promise<Session> {
   return json<Session>(res);
 }
 
+/** True when the server can actually send mail; hides the link otherwise. */
+export async function passwordResetAvailable(): Promise<boolean> {
+  try {
+    const res = await api("/api/password/available");
+    return (await json<{ available: boolean }>(res)).available;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Always resolves, whether or not the address has an account — the server
+ * deliberately gives the same answer either way, so the UI must not imply
+ * anything about whether the email was found.
+ */
+export async function forgotPassword(email: string): Promise<void> {
+  const res = await api("/api/password/forgot", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  await json<{ ok: true }>(res);
+}
+
+/** Redeems a reset token and logs the user straight in. */
+export async function resetPassword(token: string, password: string): Promise<Session> {
+  const res = await api("/api/password/reset", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ token, password }),
+  });
+  return json<Session>(res);
+}
+
 export async function logout(): Promise<void> {
   await api("/api/logout", { method: "POST" });
 }

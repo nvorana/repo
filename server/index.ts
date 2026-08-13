@@ -19,7 +19,8 @@ import {
 import { ReviewStore, type FindingFlag, type ReviewJob } from "./store.ts";
 import { SupportStore } from "./support.ts";
 import { LessonStore } from "./lessons.ts";
-import { UserStore, toPublic, type Role, type User } from "./users.ts";
+import { UserStore, toPublic, MIN_PASSWORD, type Role, type User } from "./users.ts";
+import { appUrl, mailConfigured, sendPasswordReset } from "./mailer.ts";
 import {
   clearSessionCookie,
   setSessionCookie,
@@ -184,6 +185,87 @@ app.post("/api/login", (req, res) => {
 app.post("/api/logout", (_req, res) => {
   clearSessionCookie(res);
   res.json({ ok: true });
+});
+
+// --- Password reset ---------------------------------------------------------
+// Two rules shape this: never reveal whether an address has an account (so the
+// response is identical either way), and never let the endpoint become a way to
+// spam someone's inbox (hence the throttle).
+const resetAttempts = new Map<string, { count: number; windowStart: number }>();
+const RESET_WINDOW_MS = 60 * 60 * 1000;
+const RESET_MAX_PER_WINDOW = 5;
+
+function resetThrottled(key: string): boolean {
+  const now = Date.now();
+  const seen = resetAttempts.get(key);
+  if (!seen || now - seen.windowStart > RESET_WINDOW_MS) {
+    resetAttempts.set(key, { count: 1, windowStart: now });
+    return false;
+  }
+  seen.count++;
+  return seen.count > RESET_MAX_PER_WINDOW;
+}
+
+app.post("/api/password/forgot", async (req, res) => {
+  const email = typeof req.body.email === "string" ? req.body.email.trim().toLowerCase() : "";
+  // Always the same answer, whatever happens below.
+  const ok = { ok: true } as const;
+  if (!email) return res.json(ok);
+  if (resetThrottled(email) || resetThrottled(req.ip ?? "unknown")) return res.json(ok);
+
+  const issued = users.createResetToken(email);
+  if (!issued) return res.json(ok); // no such account — say nothing
+
+  try {
+    const sent = await sendPasswordReset(issued.user.email, issued.user.name, issued.token);
+    if (!sent) {
+      console.warn(
+        `Password reset requested for ${issued.user.email} but email is not configured ` +
+          "(set RESEND_API_KEY and MAIL_FROM). The link could not be delivered.",
+      );
+      // Only with an explicit opt-in, and never on a real deployment: printing
+      // a live reset link to the logs would be a handover of account access.
+      if (process.env.MAIL_DEBUG === "1") {
+        console.warn(`MAIL_DEBUG reset link: ${appUrl()}/?reset=${issued.token}`);
+      }
+    }
+  } catch (err) {
+    console.error("Could not send password reset email:", err);
+  }
+  return res.json(ok);
+});
+
+app.post("/api/password/reset", (req, res) => {
+  const token = typeof req.body.token === "string" ? req.body.token : "";
+  const password = typeof req.body.password === "string" ? req.body.password : "";
+  if (password.length < MIN_PASSWORD) {
+    return res.status(400).json({ error: `Password must be at least ${MIN_PASSWORD} characters` });
+  }
+  let user;
+  try {
+    user = users.resetPasswordWithToken(token, password);
+  } catch (err) {
+    return res.status(400).json({ error: err instanceof Error ? err.message : "Reset failed" });
+  }
+  if (!user) {
+    return res
+      .status(400)
+      .json({ error: "That reset link has expired or was already used. Request a new one." });
+  }
+  // Log them straight in — they just proved control of the account's inbox.
+  setSessionCookie(req, res, user.id);
+  res.json({
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    personal: isPersonalAccount(user),
+  });
+});
+
+/** Tells the login screen whether to offer "Forgot password?" at all. */
+app.get("/api/password/available", (_req, res) => {
+  res.json({ available: mailConfigured() });
 });
 
 app.get("/api/me", (req, res) => {
@@ -471,10 +553,11 @@ app.get("/api/reviews/:id/audio", (req, res) => {
   if (!name) return res.status(404).json({ error: "No audio stored for this review" });
   const user = currentUser(req);
   if (roleOf(req) === "rep") {
+    // A rep may replay their OWN recording before release. The recording is
+    // the rawest fact there is — it is literally their own voice — and hearing
+    // yourself is what makes a filler-word count actionable. The coach's
+    // judgment (score, written feedback) stays gated; the audio does not.
     if (!repOwns(job, user)) return res.status(404).json({ error: "Review not found" });
-    if (!repReleased(job)) {
-      return res.status(403).json({ error: "Your coach hasn't released this call yet." });
-    }
   } else if (!managerCanSee(job, user)) {
     return res.status(404).json({ error: "Review not found" });
   }

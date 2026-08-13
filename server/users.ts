@@ -13,6 +13,11 @@ export interface User {
   hash: string;
   createdAt: string;
   avatarExt?: string; // extension of the stored profile photo, if any (e.g. "jpg")
+  /** SHA-256 of the outstanding password-reset token. The token itself is only
+   *  ever in the reset email — a stolen users.json cannot be used to reset. */
+  resetHash?: string;
+  /** Epoch ms after which the outstanding reset token stops working. */
+  resetExpiresAt?: number;
 }
 
 /** User as exposed to the client — never includes the password material. */
@@ -25,8 +30,17 @@ export interface PublicUser {
   hasAvatar: boolean;
 }
 
+/** Reset links are short-lived: long enough to walk to your inbox, not much more. */
+const RESET_TTL_MS = 60 * 60 * 1000;
+/** Raised from 4 — four characters is not a password. */
+export const MIN_PASSWORD = 8;
+
 function hashPassword(password: string, salt: string): string {
   return crypto.scryptSync(password, salt, 64).toString("hex");
+}
+
+function sha256(value: string): string {
+  return crypto.createHash("sha256").update(value).digest("hex");
 }
 
 export function toPublic(u: User): PublicUser {
@@ -120,7 +134,9 @@ export class UserStore {
     const email = input.email.trim().toLowerCase();
     if (!name) throw new Error("First name is required");
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Enter a valid email address");
-    if (input.password.length < 4) throw new Error("Password must be at least 4 characters");
+    if (input.password.length < MIN_PASSWORD) {
+      throw new Error(`Password must be at least ${MIN_PASSWORD} characters`);
+    }
     if (this.getByEmail(email)) throw new Error(`An account with ${email} already exists`);
     const salt = crypto.randomBytes(16).toString("hex");
     const user: User = {
@@ -140,10 +156,56 @@ export class UserStore {
   setPassword(id: string, password: string): void {
     const u = this.getById(id);
     if (!u) throw new Error("User not found");
-    if (password.length < 4) throw new Error("Password must be at least 4 characters");
+    if (password.length < MIN_PASSWORD) {
+      throw new Error(`Password must be at least ${MIN_PASSWORD} characters`);
+    }
     u.salt = crypto.randomBytes(16).toString("hex");
     u.hash = hashPassword(password, u.salt);
+    // Any outstanding reset link dies the moment the password changes.
+    delete u.resetHash;
+    delete u.resetExpiresAt;
     this.save();
+  }
+
+  /**
+   * Issues a single-use password-reset token for an email address, or null if
+   * no such account exists. Only the token's SHA-256 is stored; the caller
+   * emails the raw token and cannot recover it afterwards.
+   */
+  createResetToken(email: string): { user: User; token: string } | null {
+    const u = this.getByEmail(email);
+    if (!u) return null;
+    const token = crypto.randomBytes(32).toString("base64url");
+    u.resetHash = sha256(token);
+    u.resetExpiresAt = Date.now() + RESET_TTL_MS;
+    this.save();
+    return { user: u, token };
+  }
+
+  /**
+   * Redeems a reset token and sets the new password in one step, so a valid
+   * token can never be spent without actually changing the password. Returns
+   * the user on success, null when the token is unknown, expired or reused.
+   */
+  resetPasswordWithToken(token: string, password: string): User | null {
+    if (!token) return null;
+    const hash = sha256(token);
+    // Compare against every candidate in constant time — the list is tiny.
+    let match: User | null = null;
+    for (const u of this.users) {
+      if (!u.resetHash || u.resetHash.length !== hash.length) continue;
+      if (crypto.timingSafeEqual(Buffer.from(u.resetHash), Buffer.from(hash))) match = u;
+    }
+    if (!match) return null;
+    if (!match.resetExpiresAt || match.resetExpiresAt < Date.now()) {
+      delete match.resetHash;
+      delete match.resetExpiresAt;
+      this.save();
+      return null;
+    }
+    // setPassword clears the token, making this single-use.
+    this.setPassword(match.id, password);
+    return match;
   }
 
   setAvatarExt(id: string, ext: string): void {

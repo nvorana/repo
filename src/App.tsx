@@ -10,6 +10,10 @@ import {
   reanalyzeReview,
   saveCoachFeedback,
   deleteReview,
+  forgotPassword,
+  passwordResetAvailable,
+  resetPassword,
+  audioUrl,
   STATUS_LABELS,
   type ReviewJob,
   type ReviewSummary,
@@ -31,6 +35,10 @@ type ManagerTab = "team" | "mine" | "reports" | "people";
 
 export default function App() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
+  // Read once on mount: the reset token lives in the URL the email linked to.
+  const [resetToken, setResetToken] = useState<string | null>(() =>
+    new URLSearchParams(window.location.search).get("reset"),
+  );
   const [tab, setTab] = useState<ManagerTab>("team");
 
   const [reviews, setReviews] = useState<ReviewSummary[]>([]);
@@ -104,6 +112,22 @@ export default function App() {
       <div className="flex min-h-full items-center justify-center bg-base-100">
         <span className="loading loading-spinner loading-lg text-primary" />
       </div>
+    );
+  }
+
+  // Arriving from a reset email (/?reset=<token>) takes priority over the login
+  // form — the user has a link in hand and no working password to type.
+  if (resetToken) {
+    return (
+      <ResetPasswordScreen
+        token={resetToken}
+        onLogin={setSession}
+        onDone={() => {
+          // Drop the token from the URL so a refresh can't replay a spent link.
+          window.history.replaceState(null, "", window.location.pathname);
+          setResetToken(null);
+        }}
+      />
     );
   }
 
@@ -215,11 +239,110 @@ export default function App() {
 
 // --- Login ------------------------------------------------------------------
 
+function AuthCard({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex min-h-full items-center justify-center bg-base-100 px-6">
+      <div className="card w-full max-w-sm bg-base-200 shadow-xl">
+        <div className="card-body">
+          <h1 className="text-center text-2xl font-bold">
+            SalesCall<span className="text-primary">OS</span>
+          </h1>
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const MIN_PASSWORD = 8;
+
+/** Shown when the user arrives from a reset email (?reset=<token>). */
+function ResetPasswordScreen({
+  token,
+  onLogin,
+  onDone,
+}: {
+  token: string;
+  onLogin: (s: Session) => void;
+  onDone: () => void;
+}) {
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const tooShort = password.length > 0 && password.length < MIN_PASSWORD;
+  const mismatch = confirm.length > 0 && password !== confirm;
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const session = await resetPassword(token, password);
+      onDone(); // strip ?reset= so a refresh doesn't retry a spent token
+      onLogin(session);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not reset password");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <AuthCard>
+      <p className="mb-2 text-center text-sm opacity-60">Choose a new password.</p>
+      <form onSubmit={submit} className="space-y-3">
+        <input
+          type="password"
+          autoFocus
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder={`New password (min ${MIN_PASSWORD} characters)`}
+          className="input input-bordered w-full"
+        />
+        <input
+          type="password"
+          value={confirm}
+          onChange={(e) => setConfirm(e.target.value)}
+          placeholder="Confirm new password"
+          className="input input-bordered w-full"
+        />
+        {(tooShort || mismatch || error) && (
+          <div className="alert alert-error py-2 text-sm">
+            <span>
+              {error ??
+                (tooShort ? `Use at least ${MIN_PASSWORD} characters.` : "Passwords don't match.")}
+            </span>
+          </div>
+        )}
+        <button
+          type="submit"
+          disabled={busy || password.length < MIN_PASSWORD || password !== confirm}
+          className="btn btn-primary w-full"
+        >
+          {busy ? <span className="loading loading-spinner loading-sm" /> : "Set password and log in"}
+        </button>
+        <button type="button" onClick={onDone} className="btn btn-ghost btn-sm w-full">
+          Back to log in
+        </button>
+      </form>
+    </AuthCard>
+  );
+}
+
 function LoginScreen({ onLogin }: { onLogin: (s: Session) => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [mode, setMode] = useState<"login" | "forgot">("login");
+  const [canReset, setCanReset] = useState(false);
+  const [sent, setSent] = useState(false);
+
+  useEffect(() => {
+    void passwordResetAvailable().then(setCanReset);
+  }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -234,44 +357,129 @@ function LoginScreen({ onLogin }: { onLogin: (s: Session) => void }) {
     }
   }
 
-  return (
-    <div className="flex min-h-full items-center justify-center bg-base-100 px-6">
-      <div className="card w-full max-w-sm bg-base-200 shadow-xl">
-        <form onSubmit={submit} className="card-body">
-          <h1 className="text-center text-2xl font-bold">
-            SalesCall<span className="text-primary">OS</span>
-          </h1>
-          <p className="mb-2 text-center text-sm opacity-60">Log in to continue.</p>
-          <input
-            type="email"
-            autoFocus
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="Email"
-            className="input input-bordered w-full"
-          />
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Password"
-            className="input input-bordered w-full"
-          />
-          {error && (
-            <div className="alert alert-error py-2 text-sm">
-              <span>{error}</span>
+  async function submitForgot(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await forgotPassword(email);
+      setSent(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not send the reset email");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (mode === "forgot") {
+    return (
+      <AuthCard>
+        {sent ? (
+          <>
+            {/* Worded so it reveals nothing about whether the account exists. */}
+            <div className="alert alert-success py-2 text-sm">
+              <span>
+                If an account exists for <strong>{email}</strong>, a reset link is on its way. It
+                works once and expires in an hour.
+              </span>
             </div>
-          )}
-          <button
-            type="submit"
-            disabled={busy || !email || !password}
-            className="btn btn-primary mt-2 w-full"
-          >
-            {busy ? <span className="loading loading-spinner loading-sm" /> : "Log in"}
-          </button>
-        </form>
-      </div>
-    </div>
+            <p className="mt-2 text-center text-xs opacity-60">
+              Nothing after a few minutes? Check spam, or ask Mike to reset it for you.
+            </p>
+            <button
+              onClick={() => {
+                setMode("login");
+                setSent(false);
+              }}
+              className="btn btn-ghost btn-sm mt-2 w-full"
+            >
+              Back to log in
+            </button>
+          </>
+        ) : (
+          <>
+            <p className="mb-2 text-center text-sm opacity-60">
+              Enter your email and we'll send a reset link.
+            </p>
+            <form onSubmit={submitForgot} className="space-y-3">
+              <input
+                type="email"
+                autoFocus
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Email"
+                className="input input-bordered w-full"
+              />
+              {error && (
+                <div className="alert alert-error py-2 text-sm">
+                  <span>{error}</span>
+                </div>
+              )}
+              <button
+                type="submit"
+                disabled={busy || !email}
+                className="btn btn-primary w-full"
+              >
+                {busy ? <span className="loading loading-spinner loading-sm" /> : "Send reset link"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode("login")}
+                className="btn btn-ghost btn-sm w-full"
+              >
+                Back to log in
+              </button>
+            </form>
+          </>
+        )}
+      </AuthCard>
+    );
+  }
+
+  return (
+    <AuthCard>
+      <p className="mb-2 text-center text-sm opacity-60">Log in to continue.</p>
+      <form onSubmit={submit} className="space-y-3">
+        <input
+          type="email"
+          autoFocus
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="Email"
+          className="input input-bordered w-full"
+        />
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="Password"
+          className="input input-bordered w-full"
+        />
+        {error && (
+          <div className="alert alert-error py-2 text-sm">
+            <span>{error}</span>
+          </div>
+        )}
+        <button
+          type="submit"
+          disabled={busy || !email || !password}
+          className="btn btn-primary w-full"
+        >
+          {busy ? <span className="loading loading-spinner loading-sm" /> : "Log in"}
+        </button>
+      </form>
+      {canReset && (
+        <button
+          onClick={() => {
+            setMode("forgot");
+            setError(null);
+          }}
+          className="btn btn-link btn-sm mt-1 w-full no-underline opacity-70"
+        >
+          Forgot password?
+        </button>
+      )}
+    </AuthCard>
   );
 }
 
@@ -1046,6 +1254,37 @@ function PendingReleaseView({ job }: { job: ReviewJob }) {
           </p>
         </div>
       </div>
+
+      {(job.repAudioFile || job.audioFile || job.clientAudioFile) && (
+        <div className="card bg-base-100 shadow">
+          <div className="card-body">
+            <h3 className="card-title text-base">Listen back</h3>
+            <p className="text-sm opacity-60">
+              Your own recording. Hearing yourself is the fastest way to make the numbers below
+              mean something.
+            </p>
+            {job.clientAudioFile ? (
+              <div className="mt-2 space-y-3">
+                <div>
+                  <div className="mb-1 text-sm font-medium">Your track</div>
+                  <audio controls preload="none" className="w-full" src={audioUrl(job.id, "rep")} />
+                </div>
+                <div>
+                  <div className="mb-1 text-sm font-medium">Client track</div>
+                  <audio
+                    controls
+                    preload="none"
+                    className="w-full"
+                    src={audioUrl(job.id, "client")}
+                  />
+                </div>
+              </div>
+            ) : (
+              <audio controls preload="none" className="mt-2 w-full" src={audioUrl(job.id)} />
+            )}
+          </div>
+        </div>
+      )}
 
       {rows.length > 0 && (
         <div className="card bg-base-100 shadow">
