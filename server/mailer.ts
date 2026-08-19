@@ -3,8 +3,8 @@
  *
  * Deliberately no SDK dependency — this is one POST. Configure with:
  *   RESEND_API_KEY  the API key from resend.com
- *   MAIL_FROM       e.g. "SalesCallOS <noreply@chillyonaryo.com>" (domain must
- *                   be verified in Resend, otherwise Resend rejects the send)
+ *   MAIL_FROM       OPTIONAL. e.g. "SalesCallOS <noreply@chillyonaryo.com>" (domain must
+ *                   be verified in Resend). Defaults to Resend's shared sender.
  *   APP_URL         public base URL, default https://salesos.chillyonaryo.com
  *
  * With no RESEND_API_KEY the app still runs and password reset still *works* —
@@ -13,8 +13,25 @@
 
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
 
+/**
+ * Only the API key is required. MAIL_FROM is optional and defaults to Resend's
+ * shared sender, which needs no DNS setup.
+ *
+ * This used to require BOTH, which meant setting just the key silently did
+ * nothing — the feature reported itself unavailable with no hint why. That is a
+ * bad failure mode for a variable people forget.
+ */
 export function mailConfigured(): boolean {
-  return Boolean(process.env.RESEND_API_KEY && process.env.MAIL_FROM);
+  return Boolean(process.env.RESEND_API_KEY);
+}
+
+/**
+ * Sender address. Override with MAIL_FROM once your own domain is verified in
+ * Resend — the default works immediately but, being Resend's shared test
+ * sender, only delivers to the Resend account owner's own address.
+ */
+export function mailFrom(): string {
+  return process.env.MAIL_FROM || "SalesCallOS <onboarding@resend.dev>";
 }
 
 export function appUrl(): string {
@@ -28,7 +45,7 @@ async function send(to: string, subject: string, html: string, text: string): Pr
       authorization: `Bearer ${process.env.RESEND_API_KEY}`,
       "content-type": "application/json",
     },
-    body: JSON.stringify({ from: process.env.MAIL_FROM, to: [to], subject, html, text }),
+    body: JSON.stringify({ from: mailFrom(), to: [to], subject, html, text }),
   });
   if (!res.ok) {
     // Surface Resend's own message — usually "domain not verified" or a bad key.
