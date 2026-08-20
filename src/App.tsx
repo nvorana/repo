@@ -14,6 +14,9 @@ import {
   passwordResetAvailable,
   resetPassword,
   audioUrl,
+  listUsers,
+  setViewAs,
+  type AppUser,
   STATUS_LABELS,
   type ReviewJob,
   type ReviewSummary,
@@ -35,6 +38,10 @@ type ManagerTab = "team" | "mine" | "reports" | "people";
 
 export default function App() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
+  // Manager "view as": the roster to choose from. Whether we ARE viewing as
+  // someone is read from session.viewingAs (server-authoritative), not mirrored
+  // locally, so the banner can never disagree with what the API is returning.
+  const [people, setPeople] = useState<AppUser[]>([]);
   // Read once on mount: the reset token lives in the URL the email linked to.
   const [resetToken, setResetToken] = useState<string | null>(() =>
     new URLSearchParams(window.location.search).get("reset"),
@@ -64,6 +71,11 @@ export default function App() {
     window.addEventListener("pageshow", onShow);
     return () => window.removeEventListener("pageshow", onShow);
   }, []);
+
+  useEffect(() => {
+    if (session?.role !== "manager" || session.viewingAs) return;
+    listUsers().then(setPeople).catch(console.error);
+  }, [session]);
 
   const refreshList = useCallback(() => {
     listReviews().then(setReviews).catch(console.error);
@@ -100,7 +112,27 @@ export default function App() {
     };
   }, [selectedId, detailRefresh]);
 
+  /**
+   * Enter or leave view-as. Sets the identity the api layer sends, then reloads
+   * the session — which comes back as the TARGET, so every screen below renders
+   * their view rather than a manager's approximation of it.
+   */
+  async function enterViewAs(id: string | null) {
+    setViewAs(id);
+    setSelectedId(null);
+    setReviews([]);
+    try {
+      setSession(await getSession());
+    } catch {
+      // Roll back rather than leave the UI claiming an identity it doesn't have.
+      setViewAs(null);
+      setSession(await getSession());
+    }
+    setDetailRefresh((n) => n + 1);
+  }
+
   async function handleLogout() {
+    setViewAs(null);
     await logout();
     setSession(null);
     setSelectedId(null);
@@ -150,8 +182,25 @@ export default function App() {
     { id: "people", label: "People", short: "People" },
   ];
 
+  const viewing = Boolean(session.viewingAs);
+
   return (
     <div className="min-h-full bg-base-100 text-base-content">
+      {viewing && (
+        <div className="print-hide sticky top-0 z-50 bg-warning text-warning-content">
+          <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-2 px-6 py-2">
+            <span className="text-sm font-medium">
+              Viewing as <strong>{session.name}</strong> — this is exactly what they see. Read only.
+            </span>
+            <button
+              onClick={() => void enterViewAs(null)}
+              className="btn btn-sm border-none bg-warning-content/15 hover:bg-warning-content/25"
+            >
+              Exit
+            </button>
+          </div>
+        </div>
+      )}
       <header className="print-hide border-b border-base-300 bg-base-200/40">
         <div className="navbar mx-auto max-w-5xl px-6">
           <div className="flex-1 items-center">
@@ -178,6 +227,23 @@ export default function App() {
             <span className="badge badge-ghost badge-sm">
               {isManager ? "Sales head" : "Salesperson"}
             </span>
+            {isManager && !viewing && people.length > 1 && (
+              <select
+                aria-label="View the app as one of your team"
+                className="select select-bordered select-sm hidden max-w-[11rem] sm:inline-flex"
+                value=""
+                onChange={(e) => e.target.value && void enterViewAs(e.target.value)}
+              >
+                <option value="">View as…</option>
+                {people
+                  .filter((u) => u.id !== session.id)
+                  .map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name}
+                    </option>
+                  ))}
+              </select>
+            )}
             <button onClick={() => void handleLogout()} className="btn btn-ghost btn-sm">
               Log out
             </button>

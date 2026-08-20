@@ -147,7 +147,36 @@ function authEnabled(): boolean {
   return users.count() > 0;
 }
 
+/**
+ * Manager "view as": a manager may load any request AS one of their people, to
+ * see exactly what that person sees. Returns the impersonated user, or null.
+ *
+ * Deliberately reuses managerCanSee, so a personal account (the owner's own
+ * calls) can never be viewed by anyone else — view-as must not become a hole in
+ * the privacy model it sits next to.
+ */
+function viewAsTarget(req: express.Request): User | null {
+  const raw = typeof req.query.viewAs === "string" ? req.query.viewAs.trim() : "";
+  if (!raw) return null;
+  const actorId = userIdFromRequest(req);
+  const actor = actorId ? users.getById(actorId) : null;
+  if (!actor || actor.role !== "manager") return null;
+  const target = users.getById(raw);
+  if (!target || target.id === actor.id) return null;
+  if (!managerCanSee({ repId: target.id }, actor)) return null;
+  return target;
+}
+
+/**
+ * The identity every route gates on. Under view-as this is the TARGET, not the
+ * manager — so the real rep code path runs and the manager sees precisely what
+ * the rep sees, rather than a manager-side reconstruction that could drift from
+ * it. Writes are refused separately (see the read-only guard below), so swapping
+ * identity can never become acting as someone else.
+ */
 function currentUser(req: express.Request): User | null {
+  const target = viewAsTarget(req);
+  if (target) return target;
   const id = userIdFromRequest(req);
   return id ? users.getById(id) : null;
 }
@@ -274,7 +303,28 @@ app.get("/api/me", (req, res) => {
   }
   const user = currentUser(req);
   if (!user) return res.status(401).json({ error: "Not logged in" });
-  res.json({ id: user.id, name: user.name, email: user.email, role: user.role, personal: isPersonalAccount(user) });
+  // Under view-as, `user` is the TARGET. Say so explicitly, so the UI can show
+  // the read-only banner instead of silently looking like a logged-in rep.
+  const viewing = viewAsTarget(req);
+  res.json({
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    personal: isPersonalAccount(user),
+    ...(viewing ? { viewingAs: true } : {}),
+  });
+});
+
+// View-as is strictly read-only. A manager inspecting a rep's view must never
+// be able to act as them — release a report, flag a finding, upload, delete.
+// Refusing by METHOD (not by route) means any future write route is covered
+// automatically, instead of relying on someone remembering to opt it in.
+app.use("/api", (req, res, next) => {
+  if (req.query.viewAs && req.method !== "GET") {
+    return res.status(403).json({ error: "You're viewing as someone else — that's read-only." });
+  }
+  next();
 });
 
 // Everything below requires a logged-in user (open when no accounts exist).

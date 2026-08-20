@@ -120,7 +120,9 @@ export async function reanalyzeMine(): Promise<{ queued: number }> {
 }
 
 export function audioUrl(id: string, track?: "rep" | "client"): string {
-  return track ? `/api/reviews/${id}/audio?track=${track}` : `/api/reviews/${id}/audio`;
+  // Goes straight into an <audio src>, so it never passes through api() — it
+  // needs the same viewAs treatment or playback would 403 while viewing as a rep.
+  return withViewAs(track ? `/api/reviews/${id}/audio?track=${track}` : `/api/reviews/${id}/audio`);
 }
 
 export function userAvatarUrl(id: string): string {
@@ -135,9 +137,32 @@ async function json<T>(res: Response): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+/**
+ * When a manager is inspecting someone else's view, every request must carry
+ * that identity. Held module-level and injected in api() rather than threaded
+ * through each call site: a single call that forgot the parameter would show
+ * the manager their OWN data while the banner claimed otherwise, which is worse
+ * than the feature not existing.
+ */
+let viewAsId: string | null = null;
+
+export function setViewAs(id: string | null): void {
+  viewAsId = id;
+}
+
+export function getViewAs(): string | null {
+  return viewAsId;
+}
+
+/** Appends viewAs to a URL, preserving any query string already on it. */
+function withViewAs(path: string): string {
+  if (!viewAsId) return path;
+  return path + (path.includes("?") ? "&" : "?") + "viewAs=" + encodeURIComponent(viewAsId);
+}
+
 // All requests are same-origin; "same-origin" credentials send the session cookie.
 function api(path: string, init: RequestInit = {}): Promise<Response> {
-  return fetch(path, { credentials: "same-origin", ...init });
+  return fetch(withViewAs(path), { credentials: "same-origin", ...init });
 }
 
 // --- Auth -------------------------------------------------------------------
@@ -148,6 +173,8 @@ export interface Session {
   name: string;
   email: string;
   role: Role;
+  /** True when this session is a manager inspecting someone else's view. */
+  viewingAs?: boolean;
   /** True for the app owner's account — excluded from team reporting. */
   personal?: boolean;
 }
