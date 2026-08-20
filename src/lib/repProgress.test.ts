@@ -18,9 +18,9 @@ function call(over: Partial<ReviewSummary> = {}): ReviewSummary {
     // fail exactly the one measure it is about.
     metrics: {
       talkRatio: 50,
-      longPausesHeld: 12,
+      longPausesHeld: 60,
       fillerWords: 10,
-      questionsAsked: 60,
+      questionsAsked: 130,
       interruptions: 2,
       durationMin: 60,
     },
@@ -107,11 +107,12 @@ describe("buildRepProgress", () => {
   });
 
   it("names the recurring measure furthest from target as the focus", () => {
+    // Everything clears its bar except talk ratio, so the focus is unambiguous.
     const bad = {
-      talkRatio: 80, // target <=55/hr-independent, off by 25
-      longPausesHeld: 12,
-      fillerWords: 40, // target <=30/hr, off by 10
-      questionsAsked: 60,
+      talkRatio: 80,
+      longPausesHeld: 60,
+      fillerWords: 10,
+      questionsAsked: 130,
       interruptions: 2,
       durationMin: 60,
     };

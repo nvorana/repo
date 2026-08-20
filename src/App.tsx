@@ -32,6 +32,7 @@ import { ChatBubble } from "./components/ChatBubble.tsx";
 import { SupportInbox } from "./components/SupportInbox.tsx";
 import { TeamCoachingHome } from "./components/TeamCoachingHome.tsx";
 import { RepProgress } from "./components/RepProgress.tsx";
+import { METRIC_MEASURES, PER_HOUR_KEYS } from "./lib/targets.ts";
 
 const POLL_MS = 4000;
 type ManagerTab = "team" | "mine" | "reports" | "people";
@@ -1281,29 +1282,25 @@ function PendingReleaseView({ job }: { job: ReviewJob }) {
   const m = job.metrics;
   // Measured from audio timings, not judged by the model — so the owner sees
   // these while the report itself is still with the coach.
+  // Driven by METRIC_MEASURES so this panel and the progress view can never
+  // disagree about what "good" is — they were previously two hardcoded lists.
+  const perHour = (raw: number) =>
+    m?.durationMin ? Math.round((raw * 60) / m.durationMin) : null;
   const rows = m
-    ? [
-        { label: "Talk ratio", value: `${m.talkRatio}%`, target: "≤ 55%", ok: m.talkRatio <= 55 },
-        {
-          label: "Questions asked",
-          value: `${m.questionsAsked}`,
-          target: "≥ 12",
-          ok: m.questionsAsked >= 12,
-        },
-        { label: "Filler words", value: `${m.fillerWords}`, target: "≤ 5", ok: m.fillerWords <= 5 },
-        {
-          label: "Long pauses held",
-          value: `${m.longPausesHeld}`,
-          target: "≥ 3",
-          ok: m.longPausesHeld >= 3,
-        },
-        {
-          label: "Interruptions",
-          value: `${m.interruptions}`,
-          target: "≤ 3",
-          ok: m.interruptions <= 3,
-        },
-      ]
+    ? METRIC_MEASURES.flatMap((cfg) => {
+        const raw = (m as unknown as Record<string, number | undefined>)[cfg.key];
+        if (raw == null) return [];
+        const value = PER_HOUR_KEYS.has(cfg.key) ? perHour(raw) : raw;
+        if (value == null) return [];
+        const ok = cfg.direction === "lower" ? value <= cfg.target : value >= cfg.target;
+        const fmt = cfg.format ?? ((v: number) => String(v));
+        return [{
+          label: cfg.label,
+          value: fmt(value),
+          target: `${cfg.direction === "lower" ? "≤" : "≥"} ${fmt(cfg.target)}`,
+          ok,
+        }];
+      })
     : [];
 
   return (
