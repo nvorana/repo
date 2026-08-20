@@ -4,7 +4,7 @@ import { countsTowardTrends } from "./eligibility.ts";
 /** Placeholder rows the analyzer sometimes emits; never a real framework skill. */
 const PLACEHOLDER_CRITERION_IDS = new Set(["", "coaching", "placeholder"]);
 
-function isRealCriterion(c: { criterionId: string; criterionName: string }): boolean {
+export function isRealCriterion(c: { criterionId: string; criterionName: string }): boolean {
   return (
     Boolean(c.criterionName?.trim()) && !PLACEHOLDER_CRITERION_IDS.has(c.criterionId.trim())
   );

@@ -32,10 +32,11 @@ import { ChatBubble } from "./components/ChatBubble.tsx";
 import { SupportInbox } from "./components/SupportInbox.tsx";
 import { TeamCoachingHome } from "./components/TeamCoachingHome.tsx";
 import { RepProgress } from "./components/RepProgress.tsx";
+import { WeeklyReview } from "./components/WeeklyReview.tsx";
 import { METRIC_MEASURES, PER_HOUR_KEYS } from "./lib/targets.ts";
 
 const POLL_MS = 4000;
-type ManagerTab = "team" | "mine" | "reports" | "people";
+type ManagerTab = "team" | "weekly" | "mine" | "reports" | "people";
 
 export default function App() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
@@ -48,6 +49,9 @@ export default function App() {
     new URLSearchParams(window.location.search).get("reset"),
   );
   const [tab, setTab] = useState<ManagerTab>("team");
+  /** Which salesperson the team page is narrowed to ("" = everyone). Owned here
+   *  so the weekly view can hand a rep over without a second copy of the state. */
+  const [repFilter, setRepFilter] = useState("");
 
   const [reviews, setReviews] = useState<ReviewSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -178,6 +182,7 @@ export default function App() {
 
   const managerTabs: { id: ManagerTab; label: string; short: string }[] = [
     { id: "team", label: "Team Coaching", short: "Team" },
+    { id: "weekly", label: "This Week", short: "Week" },
     { id: "mine", label: "My Coaching", short: "Mine" },
     { id: "reports", label: "Reports", short: "Reports" },
     { id: "people", label: "People", short: "People" },
@@ -278,6 +283,18 @@ export default function App() {
               refreshList();
             }}
           />
+        ) : isManager && tab === "weekly" ? (
+          <WeeklyReview
+            reviews={teamReviews}
+            onOpenCalls={(rep) => {
+              // Same drill-down the team home uses: filter the lists, go there.
+              setTab("team");
+              setRepFilter(rep);
+              requestAnimationFrame(() =>
+                document.getElementById("all-reviews")?.scrollIntoView({ behavior: "smooth" }),
+              );
+            }}
+          />
         ) : isManager && tab === "reports" ? (
           <Reports reviews={teamReviews} />
         ) : isManager && tab === "people" ? (
@@ -296,7 +313,12 @@ export default function App() {
             onSelect={setSelectedId}
           />
         ) : (
-          <ManagerHome reviews={teamReviews} onSelect={setSelectedId} />
+          <ManagerHome
+            reviews={teamReviews}
+            onSelect={setSelectedId}
+            repFilter={repFilter}
+            setRepFilter={setRepFilter}
+          />
         )}
       </main>
       <ChatBubble />
@@ -687,19 +709,24 @@ function RepHome({
 function ManagerHome({
   reviews,
   onSelect,
+  repFilter,
+  setRepFilter,
 }: {
   reviews: ReviewSummary[];
   onSelect: (id: string) => void;
+  /** Owned by App so the weekly view can narrow this page directly. */
+  repFilter: string;
+  setRepFilter: (rep: string) => void;
 }) {
   const queue = reviews.filter((r) => r.status === "completed" && !r.coachReviewed);
   const reps = [...new Set(reviews.map((r) => r.rep).filter((r): r is string => Boolean(r)))].sort();
 
   // One person filter for the whole page — narrows BOTH lists below at once.
-  const [repFilter, setRepFilter] = useState("");
   const byRep = (list: ReviewSummary[]) =>
     repFilter ? list.filter((r) => r.rep === repFilter) : list;
   const shownQueue = byRep(queue);
   const shownReviews = byRep(reviews);
+
 
   return (
     <div className="space-y-6">
