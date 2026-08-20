@@ -1,6 +1,15 @@
 import type { ReviewSummary } from "../api.ts";
 import { countsTowardTrends } from "./eligibility.ts";
 
+/** Placeholder rows the analyzer sometimes emits; never a real framework skill. */
+const PLACEHOLDER_CRITERION_IDS = new Set(["", "coaching", "placeholder"]);
+
+function isRealCriterion(c: { criterionId: string; criterionName: string }): boolean {
+  return (
+    Boolean(c.criterionName?.trim()) && !PLACEHOLDER_CRITERION_IDS.has(c.criterionId.trim())
+  );
+}
+
 export type Momentum = "slipping" | "steady" | "improving";
 export type SampleSize = "reliable" | "small" | "insufficient";
 export type Range = 30 | 90 | "all";
@@ -70,6 +79,11 @@ function cardFor(rep: string, list: ReviewSummary[]): RepCard {
   const criteria = new Map<string, { name: string; scores: number[] }>();
   for (const r of list) {
     for (const c of r.scorecard ?? []) {
+      // A handful of stored reports carry junk scorecard rows — an empty
+      // criterion name, or ids like "coaching"/"placeholder" — always scored 0.
+      // Being 0 they won every "weakest skill" contest, so the team home told
+      // the coach to work on a nameless skill while hiding the real one.
+      if (!isRealCriterion(c)) continue;
       const e = criteria.get(c.criterionId) ?? { name: c.criterionName, scores: [] };
       e.scores.push(c.score);
       criteria.set(c.criterionId, e);

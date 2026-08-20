@@ -710,6 +710,14 @@ function ManagerHome({
         reviews={reviews}
         onSelect={onSelect}
         onJumpToQueue={() => document.getElementById("coach-queue")?.scrollIntoView({ behavior: "smooth" })}
+        onReviewAll={(rep) => {
+          // Narrow the lists below to this rep, then scroll to them. Previously
+          // this button opened a single call despite promising all of them.
+          setRepFilter(rep);
+          requestAnimationFrame(() =>
+            document.getElementById("all-reviews")?.scrollIntoView({ behavior: "smooth" }),
+          );
+        }}
       />
 
       {reps.length > 0 && (
@@ -747,8 +755,8 @@ function ManagerHome({
         </div>
       )}
 
-      <div className="collapse-arrow collapse rounded-box border border-base-300 bg-base-100">
-        <input type="checkbox" />
+      <div id="all-reviews" className="collapse-arrow collapse rounded-box border border-base-300 bg-base-100">
+        <input type="checkbox" defaultChecked />
         <div className="collapse-title font-semibold">
           All reviews <span className="opacity-50">({shownReviews.length})</span>
         </div>

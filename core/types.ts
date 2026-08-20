@@ -168,7 +168,14 @@ export const scorecardItemSchema = z.object({
 export const coachingItemSchema = z.object({
   priority: z.number().describe("1 = most important improvement."),
   title: z.string().describe("Short imperative title, e.g. 'Slow down the discovery phase'."),
-  advice: z.string().describe("Concrete, actionable coaching advice."),
+  advice: z
+    .string()
+    .describe(
+      "The coaching, written as a message the sales head can paste straight " +
+        "into Viber or Messenger and send to the rep. Speak TO them (\"you\"), " +
+        "plainly and warmly, 2-4 short sentences. No headings, no bullets, no " +
+        "corporate phrasing.",
+    ),
   example: z
     .string()
     .describe(

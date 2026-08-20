@@ -139,6 +139,22 @@ Pay particular attention to:
 3. COACHING — the output must end in a short, prioritized list of changes,
    each with a concrete example rewritten from THIS call.
 
+   WRITE THE COACHING AS A MESSAGE, NOT A REPORT. The sales head copies this
+   straight into Viber or Messenger and sends it to the rep, so write it the way
+   a coach actually types to someone on their team:
+   - Address them directly as "you". Never "the salesperson" or "the rep".
+   - Two to four short sentences per item. Plain words, no jargon, no headings,
+     no bullet points, no numbered sub-lists inside the advice.
+   - Lead with the specific moment from THIS call, then what to do instead.
+     Point at what happened ("when she asked about the price at 32:10"), not at
+     an abstraction ("during the pricing phase").
+   - Be direct and warm at the same time. A colleague who wants them to win,
+     not an evaluator filing a finding. Say the hard part plainly rather than
+     softening it into vagueness — vagueness is not kindness, it just leaves
+     them unable to act.
+   - No praise sandwich, no "great job overall, however". Get to the thing.
+   - It must read naturally if sent as-is, with nothing to edit out.
+
 ACCURACY IS CRITICAL — a review that misstates what happened destroys trust:
 - Tell HYPOTHETICAL EXAMPLES apart from ACTUAL facts and commitments. When the
   salesperson paints a "what if" to create urgency — e.g. "if you decide late,

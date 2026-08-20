@@ -48,10 +48,13 @@ function MomentumBadge({ momentum, delta }: { momentum: RepCard["momentum"]; del
 export function TeamCoachingHome({
   reviews,
   onSelect,
+  onReviewAll,
   onJumpToQueue,
 }: {
   reviews: ReviewSummary[];
   onSelect: (id: string) => void;
+  /** Open the full, filtered list of one rep's calls. */
+  onReviewAll: (rep: string) => void;
   onJumpToQueue: () => void;
 }) {
   const [range, setRange] = useState<Range>(30);
@@ -162,7 +165,7 @@ export function TeamCoachingHome({
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               {t.reps.map((c) => (
-                <RepCardView key={c.rep} c={c} onSelect={onSelect} />
+                <RepCardView key={c.rep} c={c} onSelect={onSelect} onReviewAll={onReviewAll} />
               ))}
             </div>
           </div>
@@ -172,7 +175,15 @@ export function TeamCoachingHome({
   );
 }
 
-function RepCardView({ c, onSelect }: { c: RepCard; onSelect: (id: string) => void }) {
+function RepCardView({
+  c,
+  onSelect,
+  onReviewAll,
+}: {
+  c: RepCard;
+  onSelect: (id: string) => void;
+  onReviewAll: (rep: string) => void;
+}) {
   const insufficient = c.sampleSize === "insufficient";
   return (
     <div className="rounded-box border border-base-300 bg-base-100 p-4">
@@ -221,7 +232,7 @@ function RepCardView({ c, onSelect }: { c: RepCard; onSelect: (id: string) => vo
               </button>
             )}
             {c.recentCallId && (
-              <button className="btn btn-outline btn-sm flex-1" onClick={() => onSelect(c.recentCallId!)}>
+              <button className="btn btn-outline btn-sm flex-1" onClick={() => onReviewAll(c.rep)}>
                 Review {c.calls} call{c.calls === 1 ? "" : "s"}
               </button>
             )}
