@@ -33,6 +33,7 @@ import { SupportInbox } from "./components/SupportInbox.tsx";
 import { TeamCoachingHome } from "./components/TeamCoachingHome.tsx";
 import { RepProgress } from "./components/RepProgress.tsx";
 import { WeeklyReview } from "./components/WeeklyReview.tsx";
+import { draftCoachNote } from "./lib/coachNote.ts";
 import { METRIC_MEASURES, PER_HOUR_KEYS } from "./lib/targets.ts";
 
 const POLL_MS = 4000;
@@ -1141,10 +1142,48 @@ function CoachPanel({
           )
         ) : (
           <div className="print-hide space-y-3">
+            {/* The blank page is most of why calls never got released: 370
+                analysed, 6 released. A draft to edit is a different task from a
+                draft to write. */}
+            <div className="flex flex-wrap items-center gap-2">
+              {job.result?.review && (
+                <button
+                  type="button"
+                  className="btn btn-outline btn-sm"
+                  onClick={() =>
+                    setNotes((prev) =>
+                      prev.trim()
+                        ? prev
+                        : draftCoachNote(job.result!.review, job.rep),
+                    )
+                  }
+                  disabled={Boolean(notes.trim())}
+                  title={
+                    notes.trim()
+                      ? "Clear the box first to replace what you've written"
+                      : "Write a first draft from this report"
+                  }
+                >
+                  Draft from report
+                </button>
+              )}
+              {notes.trim() && (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => void navigator.clipboard.writeText(notes)}
+                >
+                  Copy for Viber
+                </button>
+              )}
+              <span className="text-xs opacity-50">
+                Written to be sent as-is — edit anything that isn't yours.
+              </span>
+            </div>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              rows={5}
+              rows={12}
               placeholder="What this rep should keep doing, stop doing, and try on the next call…"
               className="textarea textarea-bordered w-full"
             />
