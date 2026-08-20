@@ -13,6 +13,7 @@ import {
   reanalyzeCall,
   reviewCall,
   reviewCallFromTracks,
+  computeDeliveryMetrics,
   type SalesFramework,
   type SupportMessage,
 } from "../core/index.ts";
@@ -741,6 +742,38 @@ app.post("/api/lessons/:id/discard", requireManager, (req, res) => {
   } catch {
     res.status(404).json({ error: "Lesson not found" });
   }
+});
+
+/**
+ * Recompute delivery metrics for every stored review, from the transcript we
+ * already have. Pure arithmetic — no model call, so this costs nothing and
+ * takes seconds.
+ *
+ * Exists because metric BUGS (interruptions counting acknowledgment, held
+ * pauses reporting a display cap) are fixable without re-scoring. Re-analysis
+ * would also fix them but bills an Opus call per review; only a change in
+ * judgment — a new price list, a new framework — actually needs that.
+ */
+app.post("/api/metrics/recompute", requireManager, (_req, res) => {
+  let updated = 0;
+  let skipped = 0;
+  for (const job of store.list()) {
+    const result = job.result;
+    if (!result?.transcript?.utterances?.length) {
+      skipped++;
+      continue;
+    }
+    try {
+      const metrics = computeDeliveryMetrics(result.transcript);
+      store.update(job.id, { result: { ...result, metrics } });
+      updated++;
+    } catch (err) {
+      console.error(`Could not recompute metrics for ${job.id}:`, err);
+      skipped++;
+    }
+  }
+  console.log(`Recomputed delivery metrics: ${updated} updated, ${skipped} skipped.`);
+  res.json({ updated, skipped });
 });
 
 app.post("/api/reanalyze/mine", requireManager, (req, res) => {
