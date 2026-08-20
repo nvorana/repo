@@ -1,5 +1,5 @@
 import { computeMeasureTrend, pickCoachNext, type MeasureTrend, type MeasurePoint } from "./trends.ts";
-import { METRIC_MEASURES, skillMeasure } from "./targets.ts";
+import { METRIC_MEASURES, PER_HOUR_KEYS, skillMeasure } from "./targets.ts";
 
 export interface RepReview {
   id: string;
@@ -12,6 +12,8 @@ export interface RepReview {
     fillerWords: number;
     questionsAsked: number;
     interruptions: number;
+    /** Call length. Absent on reviews scored before this was recorded. */
+    durationMin?: number;
   };
   objectionRate?: number | null;
   scorecard?: { criterionId: string; criterionName: string; score: number }[];
@@ -32,6 +34,19 @@ function valueFor(key: string, r: RepReview): number | null {
   }
   const m = r.metrics;
   if (!m) return null;
+
+  // Counts are judged as PER-HOUR RATES. A 90-minute call inevitably contains
+  // more filler words than a 20-minute one; scoring the raw count punishes the
+  // longer conversation for being longer. talkRatio is already a ratio and is
+  // left alone.
+  if (PER_HOUR_KEYS.has(key)) {
+    const raw = (m as Record<string, number | undefined>)[key];
+    if (raw == null) return null;
+    // No duration (older reviews) means no honest rate — better a gap in the
+    // line than a number that quietly means something different.
+    if (!m.durationMin || m.durationMin <= 0) return null;
+    return Math.round((raw * 60) / m.durationMin);
+  }
   return (m as Record<string, number>)[key] ?? null;
 }
 

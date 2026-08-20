@@ -498,10 +498,15 @@ function deliveryFields(result: ReviewJob["result"]) {
   return {
     metrics: {
       talkRatio: Math.round(m.salespersonTalkRatio * 100),
-      longPausesHeld: m.pauses.length,
+      // pauseCount, not pauses.length — the array is truncated for display, so
+      // the old field read exactly 12 on every call and meant nothing.
+      longPausesHeld: m.pauseCount ?? m.pauses.length,
       fillerWords: m.fillerWordCounts.salesperson,
       questionsAsked: m.questionCounts.salesperson,
       interruptions: m.interruptions.length,
+      // Needed so counts can be judged as RATES. A 90-minute call will always
+      // out-count a 20-minute one; an absolute target punishes the long call.
+      durationMin: Math.max(1, Math.round(m.durationMs / 60000)),
     },
   };
 }

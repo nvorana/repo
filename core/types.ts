@@ -68,8 +68,13 @@ export interface DeliveryMetrics {
   salespersonTalkRatio: number;
   /** Words per minute, per role, over their own speaking time. */
   paceWpm: { salesperson: number; prospect: number };
-  /** Silences longer than the pause threshold. */
+  /**
+   * The longest silences, truncated for display. Do NOT use .length as a count —
+   * it is capped, which is why every call reported exactly 12 held pauses.
+   */
   pauses: PauseEvent[];
+  /** How many qualifying silences there actually were, uncapped. */
+  pauseCount: number;
   longestMonologues: MonologueEvent[];
   interruptions: InterruptionEvent[];
   /** Questions asked, per role (sentences ending in "?"). */

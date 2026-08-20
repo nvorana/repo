@@ -13,12 +13,16 @@ function call(over: Partial<ReviewSummary> = {}): ReviewSummary {
     repId: "u1",
     mixedAudio: false,
     released: true,
+    // A 60-minute call, so every count below reads as "per hour" unchanged.
+    // Values chosen to CLEAR the current targets, leaving each test free to
+    // fail exactly the one measure it is about.
     metrics: {
       talkRatio: 50,
-      longPausesHeld: 4,
-      fillerWords: 3,
-      questionsAsked: 14,
-      interruptions: 1,
+      longPausesHeld: 12,
+      fillerWords: 10,
+      questionsAsked: 60,
+      interruptions: 2,
+      durationMin: 60,
     },
     ...over,
   } as ReviewSummary;
@@ -104,11 +108,12 @@ describe("buildRepProgress", () => {
 
   it("names the recurring measure furthest from target as the focus", () => {
     const bad = {
-      talkRatio: 80, // target <=55, off by 25
-      longPausesHeld: 4,
-      fillerWords: 6, // target <=5, off by 1
-      questionsAsked: 14,
-      interruptions: 1,
+      talkRatio: 80, // target <=55/hr-independent, off by 25
+      longPausesHeld: 12,
+      fillerWords: 40, // target <=30/hr, off by 10
+      questionsAsked: 60,
+      interruptions: 2,
+      durationMin: 60,
     };
     const p = buildRepProgress(
       [
@@ -124,8 +129,8 @@ describe("buildRepProgress", () => {
   it("flags a weakness the rep has since corrected as fixed, not recurring", () => {
     const p = buildRepProgress(
       [
-        call({ callDate: "2026-08-01", metrics: { ...call().metrics!, fillerWords: 20 } }),
-        call({ callDate: "2026-08-02", metrics: { ...call().metrics!, fillerWords: 2 } }),
+        call({ callDate: "2026-08-01", metrics: { ...call().metrics!, fillerWords: 60 } }),
+        call({ callDate: "2026-08-02", metrics: { ...call().metrics!, fillerWords: 10 } }),
       ],
       REP,
     );

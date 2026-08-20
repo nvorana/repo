@@ -59,6 +59,8 @@ export interface RepMetrics {
   fillerWords: number;
   questionsAsked: number;
   interruptions: number;
+  /** Call length, so counts can be compared as per-hour rates. */
+  durationMin?: number;
 }
 
 export interface ReviewJob {

@@ -16,6 +16,7 @@ const metrics: DeliveryMetrics = {
   durationMs: 1000,
   salespersonTalkRatio: 1,
   paceWpm: { salesperson: 100, prospect: 0 },
+  pauseCount: 0,
   pauses: [],
   longestMonologues: [],
   interruptions: [],

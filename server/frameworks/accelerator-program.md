@@ -55,12 +55,13 @@ so do the "shut up" moments.
     ~2 minutes. NO features, NO process detail, NO price. The 4-ebooks-a-day
     calculator moment belongs here. Answer only the specific questions asked,
     then shut up. Price is stated ONLY when the prospect asks for it.
-12. **Incentive-based pricing & THE SILENCE.** Investment is P38,000. If they
-    join now: a one-time payment of P28,000 (save P10,000), OR a two-payment
-    plan of P15,500 × 2 = P31,000 (save P7,000). (Older recordings may state the
-    previous figures — one-time P29,000 / two payments of P14,500; accept either
-    as correct. What is judged is the incentive framing and the silence, not the
-    exact peso figure.) After
+12. **Incentive-based pricing & THE SILENCE.** Investment is P40,000. If they
+    join now: a one-time payment of P31,000 (save P9,000), OR a two-payment
+    plan of P17,000 × 2 = P34,000 (save P6,000). (Pricing has changed twice;
+    older recordings may state P38,000 / one-time P28,000 / two payments of
+    P15,500, or older still P29,000 / P14,500. Accept any of these as correct —
+    what is judged is the incentive framing and the silence, not the exact peso
+    figure.) After
     stating it: total silence until the prospect speaks — even if it takes
     many minutes. Caving in (talking first, justifying, discounting further,
     softening) is the cardinal sin of this framework. On a yes: collect
@@ -102,5 +103,5 @@ payment time — or a clean, respectful no.
 - **Vision & Specific Target**: Future-paced 3 years out and got a specific peso-per-month figure and vivid lifestyle detail from the prospect's own mouth.
 - **Self-Admission & Commitment**: Elicited the magic statements (can't do it alone / want it faster / want a proven system) and surfaced the emotional driver and commitment level.
 - **Outcome-Focused Offer**: Mirrored the prospect's stated pains ("that's me" effect), kept the offer under ~2 minutes, vague and outcome-focused, no features, no price until asked.
-- **Pricing & The Silence**: Delivered incentive-based pricing exactly (P38,000 → one-time P28,000 [save P10,000] or two payments of P15,500 = P31,000 [save P7,000]; the previous P29,000 / P14,500 figures also count as correct on older calls) and held complete silence afterward without caving, justifying, or further discounting.
+- **Pricing & The Silence**: Delivered incentive-based pricing exactly (P40,000 → one-time P31,000 [save P9,000] or two payments of P17,000 = P34,000 [save P6,000]; earlier price lists — P38,000 / P28,000 / P15,500, and P29,000 / P14,500 — also count as correct on older calls) and held complete silence afterward without caving, justifying, or further discounting.
 - **Binary Close & Objection Scripts**: Refused grey-area endings, used the prescribed objection scripts, and ended with a yes (specific payment method + deposit time/deadline) or a clean no — never a "think about it."

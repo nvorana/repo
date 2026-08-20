@@ -9,8 +9,27 @@ import type {
 
 /** Silence between utterances longer than this counts as a notable pause. */
 const PAUSE_THRESHOLD_MS = 1500;
-/** Overlap of the next utterance into the previous one that counts as an interruption. */
-const INTERRUPTION_OVERLAP_MS = 500;
+/**
+ * What counts as an interruption.
+ *
+ * A cut-in is only an interruption if the incoming speaker BOTH overlaps
+ * meaningfully AND takes the floor. Overlapping acknowledgment — "opo", "tama",
+ * "yes", "uh-huh" said while the other person keeps talking — is how a normal
+ * Filipino sales conversation sounds, not a rudeness to be scored down.
+ *
+ * The previous rule (any >500ms overlap by a different speaker) counted every
+ * one of those. On single-file uploads that never showed, because one
+ * diarized transcript cannot overlap itself — median 0 interruptions. On
+ * two-track uploads, where each speaker's audio is transcribed separately and
+ * merged on a shared clock, real backchannel finally had timestamps and the
+ * median jumped to 23 with a maximum of 92. Nothing about the selling changed;
+ * only the measurement did. 98% of two-track calls then breached the ≤3 target,
+ * and the analyzer saw that inflated number while scoring.
+ */
+const INTERRUPTION_OVERLAP_MS = 1000;
+/** Below this the incoming turn is an acknowledgment, not a seizure of the floor. */
+const INTERRUPTION_MIN_WORDS = 5;
+const INTERRUPTION_MIN_MS = 2000;
 const MONOLOGUE_TOP_N = 5;
 const PAUSE_TOP_N = 12;
 
@@ -68,7 +87,13 @@ export function computeDeliveryMetrics(transcript: Transcript): DeliveryMetrics 
         afterSpeaker: role,
         precedingText: lastWords(u.text, 12),
       });
-    } else if (gap < -INTERRUPTION_OVERLAP_MS && next.role !== role) {
+    } else if (
+      gap < -INTERRUPTION_OVERLAP_MS &&
+      next.role !== role &&
+      // Did they actually take the floor, or just make a noise of agreement?
+      next.words.length >= INTERRUPTION_MIN_WORDS &&
+      next.endMs - next.startMs >= INTERRUPTION_MIN_MS
+    ) {
       interruptions.push({
         atMs: next.startMs,
         interrupter: next.role,
@@ -86,6 +111,7 @@ export function computeDeliveryMetrics(transcript: Transcript): DeliveryMetrics 
       salesperson: wpm(wordCounts.salesperson, speakingMs.salesperson),
       prospect: wpm(wordCounts.prospect, speakingMs.prospect),
     },
+    pauseCount: pauses.length,
     pauses: pauses
       .sort((a, b) => b.durationMs - a.durationMs)
       .slice(0, PAUSE_TOP_N)

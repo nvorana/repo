@@ -79,6 +79,7 @@ const previous: CallReviewResult = {
     durationMs: 0,
     salespersonTalkRatio: 0,
     paceWpm: { salesperson: 0, prospect: 0 },
+    pauseCount: 0,
     pauses: [],
     longestMonologues: [],
     interruptions: [],
