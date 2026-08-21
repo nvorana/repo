@@ -22,7 +22,7 @@ import { SupportStore } from "./support.ts";
 import { LessonStore } from "./lessons.ts";
 import { UserStore, toPublic, MIN_PASSWORD, type Role, type User } from "./users.ts";
 import { appUrl, mailConfigured, sendPasswordReset } from "./mailer.ts";
-import { apiTokenClient, tokensConfigured } from "./tokens.ts";
+import { apiTokenClient, initTokenStore, tokensConfigured } from "./tokens.ts";
 import {
   clearSessionCookie,
   setSessionCookie,
@@ -97,6 +97,13 @@ for (const job of store.list()) {
 const lessonStore = new LessonStore(path.join(DATA_DIR, "lessons"));
 
 const users = new UserStore(USERS_FILE);
+
+// Read-only API tokens live beside the users file on the volume, so they can be
+// issued and revoked without a redeploy. A credential you cannot revoke quickly
+// is a credential you cannot really trust.
+const tokenStore = initTokenStore(
+  process.env.TOKENS_FILE ?? path.join(DATA_DIR, "..", "tokens.json"),
+);
 
 // Ensure an admin login from env: whenever MANAGER_EMAIL + MANAGER_PASSWORD are
 // set and that email has no account yet, create a manager for it. This both
@@ -358,6 +365,29 @@ function requireManager(req: express.Request, res: express.Response, next: expre
   if (!authEnabled() || currentUser(req)?.role === "manager") return next();
   res.status(403).json({ error: "Only the sales head can do this" });
 }
+
+// --- Read-only API tokens (manager only) ------------------------------------
+// For machines: Cortex and anything else that consumes calls as evidence. The
+// secret is shown ONCE, at creation, and is unrecoverable afterwards — only its
+// hash is stored, so a stolen tokens.json cannot be turned into API access.
+app.get("/api/tokens", requireManager, (_req, res) => {
+  res.json(tokenStore.list());
+});
+
+app.post("/api/tokens", requireManager, (req, res) => {
+  const name = typeof req.body?.name === "string" ? req.body.name : "";
+  if (!name.trim()) return res.status(400).json({ error: "Give the token a name" });
+  const { token, secret } = tokenStore.create(name);
+  console.log(`Issued read-only API token "${token.name}" (${token.hint}…)`);
+  // The only time the secret leaves this process.
+  res.json({ ...token, secret });
+});
+
+app.delete("/api/tokens/:id", requireManager, (req, res) => {
+  const ok = tokenStore.revoke(String(req.params.id));
+  if (!ok) return res.status(404).json({ error: "No such token" });
+  res.json({ ok: true });
+});
 
 // --- User administration (manager only) -------------------------------------
 app.get("/api/users", requireManager, (_req, res) => {

@@ -71,6 +71,7 @@ process.env.AUDIO_DIR = path.join(root, "audio");
 process.env.USERS_FILE = usersFile;
 process.env.PERSONAL_EMAILS = "jon@test.local";
 process.env.API_READ_TOKENS = `cortex:${SECRET}`;
+process.env.TOKENS_FILE = path.join(root, "tokens.json");
 process.env.ANTHROPIC_API_KEY ??= "test";
 process.env.ASSEMBLYAI_API_KEY ??= "test";
 
@@ -137,6 +138,38 @@ try {
     "token cannot use view-as to become a rep",
     (await (await fetch(`${base}/api/me?viewAs=${EDGAR}`, { headers: auth(SECRET) })).json())?.viewingAs !== true,
   );
+  console.log(String.fromCharCode(10) + "ISSUED THROUGH THE API:");
+  const jonLogin = await fetch(`${base}/api/login`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email: "jon@test.local", password: "jonpw12345" }),
+  });
+  const jonCookie = jonLogin.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
+
+  const made = await (await fetch(`${base}/api/tokens`, {
+    method: "POST",
+    headers: { cookie: jonCookie, "content-type": "application/json" },
+    body: JSON.stringify({ name: "cortex-live" }),
+  })).json();
+  check("manager can mint a token", typeof made?.secret === "string" && made.secret.length > 20);
+
+  const minted = await fetch(`${base}/api/reviews`, { headers: auth(made.secret) });
+  check("the minted token reads immediately", minted.status === 200, String(minted.status));
+
+  const listed = await (await fetch(`${base}/api/tokens`, { headers: { cookie: jonCookie } })).json();
+  check("listing never returns the secret", !JSON.stringify(listed).includes(made.secret));
+
+  const tokenMakingToken = await fetch(`${base}/api/tokens`, {
+    method: "POST",
+    headers: { ...auth(SECRET), "content-type": "application/json" },
+    body: JSON.stringify({ name: "escalate" }),
+  });
+  check("a token cannot mint another token", tokenMakingToken.status === 403, String(tokenMakingToken.status));
+
+  await fetch(`${base}/api/tokens/${made.id}`, { method: "DELETE", headers: { cookie: jonCookie } });
+  const afterRevoke = await fetch(`${base}/api/reviews`, { headers: auth(made.secret) });
+  check("revoking takes effect immediately", afterRevoke.status === 401, String(afterRevoke.status));
+
 } finally {
   fs.rmSync(root, { recursive: true, force: true });
 }
