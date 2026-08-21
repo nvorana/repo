@@ -22,6 +22,7 @@ import { SupportStore } from "./support.ts";
 import { LessonStore } from "./lessons.ts";
 import { UserStore, toPublic, MIN_PASSWORD, type Role, type User } from "./users.ts";
 import { appUrl, mailConfigured, sendPasswordReset } from "./mailer.ts";
+import { apiTokenClient, tokensConfigured } from "./tokens.ts";
 import {
   clearSessionCookie,
   setSessionCookie,
@@ -183,7 +184,14 @@ function currentUser(req: express.Request): User | null {
 }
 
 function roleOf(req: express.Request): Role {
-  return currentUser(req)?.role ?? (authEnabled() ? "rep" : "manager");
+  const user = currentUser(req);
+  if (user) return user.role;
+  // A read-only token reads at manager level. It is NOT a user, so
+  // currentUser() stays null — which is deliberate: managerCanSee(job, null)
+  // is false for a personal account, so a token can never read the owner's
+  // private calls. Writes are refused by method below.
+  if (apiTokenClient(req)) return "manager";
+  return authEnabled() ? "rep" : "manager";
 }
 
 app.get("/api/health", (_req, res) => {
@@ -199,6 +207,7 @@ app.get("/api/health", (_req, res) => {
     persistentStorage: DATA_DIR.startsWith("/data"),
     reviewCount: store.list().length,
     userCount: users.count(),
+    apiTokens: tokensConfigured(),
   });
 });
 
@@ -321,6 +330,17 @@ app.get("/api/me", (req, res) => {
 // be able to act as them — release a report, flag a finding, upload, delete.
 // Refusing by METHOD (not by route) means any future write route is covered
 // automatically, instead of relying on someone remembering to opt it in.
+// A token may only ever READ. Refusing by METHOD rather than per-route means
+// every future write endpoint is covered without anyone remembering to opt it
+// in — Cortex cannot release a report, flag a finding, upload or delete.
+app.use("/api", (req, res, next) => {
+  const client = apiTokenClient(req);
+  if (client && req.method !== "GET") {
+    return res.status(403).json({ error: "This API token is read-only." });
+  }
+  next();
+});
+
 app.use("/api", (req, res, next) => {
   if (req.query.viewAs && req.method !== "GET") {
     return res.status(403).json({ error: "You're viewing as someone else — that's read-only." });
@@ -330,7 +350,7 @@ app.use("/api", (req, res, next) => {
 
 // Everything below requires a logged-in user (open when no accounts exist).
 app.use("/api", (req, res, next) => {
-  if (!authEnabled() || currentUser(req)) return next();
+  if (!authEnabled() || currentUser(req) || apiTokenClient(req)) return next();
   res.status(401).json({ error: "Not logged in" });
 });
 
@@ -493,6 +513,22 @@ app.get("/api/frameworks", (_req, res) => {
 // Delivery metrics are computed deterministically from word timings in
 // core/metrics.ts — there is no model judgment in them, so the rep who owns the
 // call sees them as soon as analysis finishes, without waiting for a release.
+/**
+ * When this review last changed in a way a consumer would care about: created,
+ * coached/released, or re-scored. Lets an external system pull incrementally
+ * instead of re-reading every call.
+ *
+ * Derived rather than stored, so it can never drift from the record. Note it
+ * does NOT move when metrics are recomputed in place (an occasional admin
+ * action) — a full resync covers that.
+ */
+function lastChangedAt(job: ReviewJob): string {
+  return [job.createdAt, job.coach?.updatedAt, job.reanalyzedAt]
+    .filter((d): d is string => Boolean(d))
+    .sort()
+    .slice(-1)[0];
+}
+
 function deliveryFields(result: ReviewJob["result"]) {
   if (!result) return {};
   const m = result.metrics;
@@ -553,6 +589,13 @@ app.get("/api/reviews", (req, res) => {
         id, filename, createdAt, callDate, status, rep, repId, client, error, released,
         mixedAudio: isMixedAudio(job),
         coachReviewed: coach?.reviewed ?? false,
+        // Provenance, for systems that consume this as evidence rather than as
+        // a screen: when it last meaningfully changed, and which methodology
+        // scored it. mixedAudio above is the trust signal — a guessed-speaker
+        // call should not be weighed the same as a two-track one.
+        updatedAt: lastChangedAt(job),
+        frameworkId: job.result?.frameworkId,
+        reanalyzedAt: job.reanalyzedAt,
         ...deliveryFields(result),
       };
       if (asRep && !repReleased(job)) return base;
