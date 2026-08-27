@@ -755,6 +755,28 @@ app.post("/api/reviews/:id/reanalyze", requireManager, (req, res) => {
   res.status(202).json({ ok: true });
 });
 
+app.post("/api/reviews/:id/retry", requireManager, (req, res) => {
+  const job = store.get(String(req.params.id));
+  if (!job || !managerCanSee(job, currentUser(req))) {
+    return res.status(404).json({ error: "Review not found" });
+  }
+  // Guarded hard: a retry re-runs the WHOLE pipeline and overwrites the job, so
+  // pointing it at a completed review would destroy a good report to rebuild it.
+  if (job.status !== "failed") {
+    return res.status(409).json({ error: "Only failed uploads can be retried." });
+  }
+  if (!storedTracks(job)) {
+    return res.status(409).json({ error: "The audio for this upload is no longer on disk." });
+  }
+  if (!process.env.ANTHROPIC_API_KEY || !process.env.ASSEMBLYAI_API_KEY) {
+    return res.status(503).json({ error: "Server is missing ANTHROPIC_API_KEY or ASSEMBLYAI_API_KEY." });
+  }
+  if (!enqueueRetry(job.id)) {
+    return res.status(409).json({ error: "This upload is already queued for a retry." });
+  }
+  res.status(202).json({ ok: true, queued: retryQueue.length });
+});
+
 app.post("/api/reviews/:id/flags", (req, res) => {
   const job = store.get(String(req.params.id));
   const user = currentUser(req);
@@ -1142,6 +1164,104 @@ async function runReanalysis(jobId: string) {
     } catch {
       // Job vanished mid-flight (deleted) — nothing to restore.
     }
+  }
+}
+
+// --- Retrying a failed upload -------------------------------------------------
+// A failed upload has audio on disk but never produced a transcript, so unlike
+// re-analysis there is nothing to re-score — the whole pipeline has to run
+// again, transcription included.
+//
+// This exists because most failures were never the rep's fault: the model API
+// out of credit, AssemblyAI rejecting an upload, a provider overload. The rep
+// handed over a call and got nothing back, which is the fastest way to teach
+// someone to stop uploading.
+//
+// Sequential, like re-analysis: a bulk retry must not hammer either provider,
+// and transcription is the expensive half.
+const retryQueue: string[] = [];
+let retryDraining = false;
+
+/**
+ * The audio still on disk for a job, ready to feed back through the pipeline.
+ * Null if a file is missing — better to refuse the retry up front than to start
+ * one that cannot finish.
+ */
+function storedTracks(
+  job: ReviewJob,
+): { kind: "tracks"; rep: string; client: string } | { kind: "single"; file: string } | null {
+  const onDisk = (name?: string) => {
+    if (!name) return null;
+    const file = path.join(AUDIO_DIR, path.basename(name));
+    return fs.existsSync(file) ? file : null;
+  };
+  const rep = onDisk(job.repAudioFile);
+  const client = onDisk(job.clientAudioFile);
+  if (rep && client) return { kind: "tracks", rep, client };
+  // A half-present two-track upload falls back to single-file rather than
+  // failing: one real track still beats no review at all.
+  const single = onDisk(job.audioFile) ?? rep ?? client;
+  return single ? { kind: "single", file: single } : null;
+}
+
+function enqueueRetry(jobId: string): boolean {
+  if (retryQueue.includes(jobId)) return false;
+  retryQueue.push(jobId);
+  void drainRetryQueue();
+  return true;
+}
+
+async function drainRetryQueue() {
+  if (retryDraining) return;
+  retryDraining = true;
+  try {
+    while (retryQueue.length > 0) {
+      // Keep the id queued while it runs so re-enqueueing is blocked.
+      await runRetry(retryQueue[0]);
+      retryQueue.shift();
+    }
+  } finally {
+    retryDraining = false;
+  }
+}
+
+async function runRetry(jobId: string) {
+  try {
+    await attemptRetry(jobId);
+  } catch (err) {
+    // A job deleted mid-flight makes store.update throw. Swallow it here: this
+    // runs detached from any request, so an escaping rejection would take the
+    // whole process down over one abandoned retry.
+    console.error(`Retry of ${jobId} could not run:`, err);
+  }
+}
+
+async function attemptRetry(jobId: string) {
+  // Re-read rather than trusting the queued snapshot: the job may have been
+  // deleted or already retried while it sat in line.
+  const job = store.get(jobId);
+  if (!job || job.status !== "failed") return;
+  const tracks = storedTracks(job);
+  if (!tracks) return;
+
+  const frameworks = loadFrameworks();
+  const framework =
+    frameworks.get(job.result?.frameworkId ?? "") ??
+    frameworks.get(pickDefaultFrameworkId(frameworks))!;
+  // AssemblyAI posts the bytes as octet-stream and ignores the declared type,
+  // so the name is only for logging.
+  const read = (file: string) => ({
+    buffer: fs.readFileSync(file),
+    originalname: path.basename(file),
+    mimetype: "application/octet-stream",
+  });
+
+  // Drop the stale error so the list shows it moving rather than sitting red.
+  store.update(jobId, { status: "queued", error: undefined });
+  if (tracks.kind === "tracks") {
+    await runReviewFromTracks(jobId, read(tracks.rep), read(tracks.client), framework);
+  } else {
+    await runReviewSingle(jobId, read(tracks.file), framework);
   }
 }
 
