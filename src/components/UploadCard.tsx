@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { listFrameworks, uploadReview, type FrameworkInfo } from "../api.ts";
+import { audioFileProblem } from "../../core/upload.ts";
 
 interface Props {
   onUploaded: (id: string) => void;
@@ -8,6 +9,17 @@ interface Props {
 }
 
 type Mode = "single" | "separate";
+
+/**
+ * The filename once a file is picked — or, if the recording never saved, why
+ * it cannot be used. Shown at pick time so the rep can go and fetch the real
+ * file, instead of finding out hours later from a failed report.
+ */
+function FileNote({ file, problem }: { file: File | null; problem: string | null }) {
+  if (!file) return null;
+  if (problem) return <span className="text-xs font-medium text-error">{problem}</span>;
+  return <span className="truncate text-xs opacity-60">{file.name}</span>;
+}
 
 /** Today's date as YYYY-MM-DD in the user's local timezone. */
 function todayLocal(): string {
@@ -51,7 +63,17 @@ export function UploadCard({ onUploaded, fixedRep }: Props) {
   }
 
   const filesReady = mode === "single" ? !!single : !!repAudio && !!clientAudio;
-  const ready = client.trim().length > 0 && filesReady;
+
+  // An empty or near-empty file is a recording that never saved. Catching it
+  // here costs the rep one glance; catching it server-side costs him an hour
+  // and a failed report he has to go looking for.
+  const singleProblem = single && audioFileProblem("This recording", single.size);
+  const repProblem = repAudio && audioFileProblem("Your recording", repAudio.size);
+  const clientProblem = clientAudio && audioFileProblem("The client's recording", clientAudio.size);
+  const fileProblem =
+    mode === "single" ? (singleProblem ?? null) : (repProblem ?? clientProblem ?? null);
+
+  const ready = client.trim().length > 0 && filesReady && !fileProblem;
 
   async function submit() {
     if (!ready || busy) return;
@@ -208,7 +230,7 @@ export function UploadCard({ onUploaded, fixedRep }: Props) {
                 className="file-input file-input-bordered file-input-sm w-full max-w-md"
                 onChange={(e) => setSingle(e.target.files?.[0] ?? null)}
               />
-              {single && <span className="truncate text-xs opacity-60">{single.name}</span>}
+              <FileNote file={single} problem={singleProblem ?? null} />
             </label>
           </>
         ) : (
@@ -229,7 +251,7 @@ export function UploadCard({ onUploaded, fixedRep }: Props) {
                   className="file-input file-input-bordered file-input-sm w-full"
                   onChange={(e) => setRepAudio(e.target.files?.[0] ?? null)}
                 />
-                {repAudio && <span className="truncate text-xs opacity-60">{repAudio.name}</span>}
+                <FileNote file={repAudio} problem={repProblem ?? null} />
               </label>
               <label className="flex flex-col gap-1">
                 <span className="text-sm font-medium">
@@ -241,7 +263,7 @@ export function UploadCard({ onUploaded, fixedRep }: Props) {
                   className="file-input file-input-bordered file-input-sm w-full"
                   onChange={(e) => setClientAudio(e.target.files?.[0] ?? null)}
                 />
-                {clientAudio && <span className="truncate text-xs opacity-60">{clientAudio.name}</span>}
+                <FileNote file={clientAudio} problem={clientProblem ?? null} />
               </label>
             </div>
           </>

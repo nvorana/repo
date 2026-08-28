@@ -25,6 +25,7 @@ export {
   type SupportOptions,
 } from "./support.ts";
 
+export { MIN_AUDIO_BYTES, audioFileProblem } from "./upload.ts";
 export { computeDeliveryMetrics, formatTimestamp } from "./metrics.ts";
 export { anchorReviewTimestamps, locateQuoteMs } from "./anchor.ts";
 export { verifyReviewClaims, quoteAppears } from "./verify.ts";

@@ -14,6 +14,7 @@ import {
   reviewCall,
   reviewCallFromTracks,
   computeDeliveryMetrics,
+  audioFileProblem,
   type SalesFramework,
   type SupportMessage,
 } from "../core/index.ts";
@@ -982,6 +983,21 @@ app.post("/api/reviews", upload.fields([{ name: "audio", maxCount: 1 }, { name: 
     return res.status(503).json({
       error: "Server is missing ASSEMBLYAI_API_KEY and/or ANTHROPIC_API_KEY — see .env.example.",
     });
+  }
+  // Refuse a recording that never saved, rather than accepting it and failing
+  // an hour later in a provider error the rep will never read. The browser
+  // checks this too; this is the control, that is the courtesy.
+  const tooSmall = (twoTracks
+    ? [
+        ["Your recording (the rep track)", repFile!.size] as const,
+        ["The client's recording", clientFile!.size] as const,
+      ]
+    : [["The call recording", singleFile!.size] as const]
+  )
+    .map(([label, size]) => audioFileProblem(label, size))
+    .find((problem) => problem !== null);
+  if (tooSmall) {
+    return res.status(400).json({ error: tooSmall });
   }
 
   const frameworks = loadFrameworks();
